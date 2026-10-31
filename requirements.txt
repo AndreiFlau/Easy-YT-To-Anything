@@ -1,2 +1,4 @@
 flask>=3.0
-yt-dlp>=2024.0
+# [default] adds yt-dlp's recommended extras, including the scripts it needs
+# (with Deno/Node) to solve YouTube's JavaScript challenges.
+yt-dlp[default]>=2025.11.12

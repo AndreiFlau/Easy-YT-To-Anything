@@ -9,59 +9,99 @@ Paste a video URL, pick a format, download. No command line needed.
 
 - 🎬 **Video (MP4)** — best video + audio merged, with a resolution picker
   (Best / 4K / 1440p / 1080p / 720p / 480p / 360p). Tagged with metadata + cover.
+  - **Most compatible MP4** (on by default) — prefers H.264 video + AAC audio,
+    so the file plays in Windows, QuickTime, phones and TVs. On YouTube this
+    usually tops out at 1080p; untick it for 1440p / 4K.
 - 🎵 **Audio (MP3)** — with **embedded cover art** and **title / artist / album
   tags**, so files drop straight into a music library.
   - **Square cover art** — optional centre-crop of the 16:9 thumbnail into a
     clean, album-style square.
-  - **Clean Artist / Title** — optional parsing of `"Artist - Song"` titles into
-    proper `artist` + `title` tags.
-- 📃 **Playlist / batch** — paste a playlist URL or many links (one per line);
-  everything downloads and is bundled into a single **.zip**.
+  - **Clean Artist / Title** — turns `"Artist - Song (Official Video)"` into
+    artist `Artist`, title `Song`, and names the file `Artist - Song.mp3`.
+- 📃 **Playlist / batch** — paste a playlist or channel URL, or many links (one
+  per line); everything downloads and is bundled into a single **.zip**. Items
+  that fail are listed, and the rest still download.
 - 📝 **Transcript** — get a video's **title, author and full transcript** as
-  text, from its subtitles or YouTube's auto-generated captions. Choose a
-  language (falls back to the original language) and optional timestamps.
-  Copy it from the page or save it as a `.txt`. Works with playlists and
-  multiple links too; everything goes into one text file.
+  text, from its subtitles or the site's auto-generated captions. Nothing but
+  text is downloaded.
+  - Language: leave empty for the language the video is spoken in, or type a
+    code (`en`, `es`, `de`, …). It falls back to what's available and tells you.
+  - Optional timestamps and video description.
+  - Copy it from the page, or save it as **.txt** or as **.srt** subtitles.
+  - Works with playlists and several links too (one combined file).
 - 🛠 **Advanced** — pick any exact format yt-dlp exposes (every resolution,
   codec, and container the site offers).
-- 📊 Live progress bar with speed and ETA (and an `N of M` counter for batches).
+- 📊 Live progress with speed and ETA (and an `N of M` counter for batches),
+  plus a **Cancel** button.
+- ⚙ **Settings** — use cookies from your browser (Firefox, Chrome, Edge, …) for
+  sites that need you to be signed in.
+- 💾 Your choices (format, quality, options, tab) are remembered between visits.
 - Works with YouTube and the [1000+ sites yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
 ## Quick start
 
 ### Windows (easiest)
-Double-click **`run.bat`**. It installs dependencies, opens your browser, and
-starts the server.
+Double-click **`run.bat`**. It installs/updates dependencies, starts the
+server and opens your browser.
+
+### macOS / Linux
+```bash
+./run.sh
+```
 
 ### Any platform (manual)
 ```bash
 python -m pip install -r requirements.txt
 python app.py
 ```
-Then open **http://127.0.0.1:5000**.
+A browser tab opens at **http://127.0.0.1:5000**. If port 5000 is taken (it
+is used by AirPlay on macOS), the next free port is used and printed in the
+terminal. Options: `python app.py --port 8080 --no-browser`.
 
-## ffmpeg (recommended)
+## Recommended extras
 
+### ffmpeg
 `ffmpeg` is needed to **merge** separate high-res video+audio streams and to
 **convert audio to MP3**. Without it, the app still works but is limited to
 single-file formats. The app shows a banner if ffmpeg is missing.
 
-Install it:
 - **Windows:** `winget install Gyan.FFmpeg` (then reopen your terminal), or
   download from https://www.gyan.dev/ffmpeg/builds/ and add the `bin` folder to PATH.
 - **macOS:** `brew install ffmpeg`
 - **Linux:** `sudo apt install ffmpeg`
 
+### A JavaScript runtime (for YouTube)
+Recent yt-dlp versions need a JavaScript runtime to handle YouTube. Without
+one, YouTube links may fail or only offer a few formats. The app uses
+[Deno](https://deno.com), [Node.js](https://nodejs.org) or
+[Bun](https://bun.sh), whichever is installed, and shows a banner if none is.
+
+- **Windows:** `winget install DenoLand.Deno`
+- **macOS:** `brew install deno`
+- **Linux:** `curl -fsSL https://deno.land/install.sh | sh`
+
+## Troubleshooting
+
+- **"Sign in to confirm you're not a bot"**, age-restricted or members-only
+  videos: open **⚙ Settings** at the bottom of the page and pick the browser
+  you're logged in with. On Windows, fully close Chrome/Edge/Brave first
+  (Firefox works best).
+- **A site suddenly stops working:** update yt-dlp:
+  `python -m pip install -U "yt-dlp[default]"` (`run.bat` / `run.sh` do this
+  for you).
+- Error messages include a 💡 tip when the app recognises the problem.
+
 ## How it works
 
 ```
 Browser (templates/index.html)
-   │  fetch /api/info      → yt-dlp probes the URL, returns formats
-   │  fetch /api/download  → starts a background single-file job, returns a job id
-   │  fetch /api/batch     → expands playlists, downloads all, zips them
-   │  fetch /api/transcript → title + author + transcript (subtitles → .txt)
+   │  fetch /api/info          → yt-dlp probes the URL, returns formats
+   │  fetch /api/download      → starts a background single-file job, returns a job id
+   │  fetch /api/batch         → expands playlists, downloads all, zips them
+   │  fetch /api/transcript    → title + author + transcript (subtitles → .txt / .srt)
    │  poll  /api/progress/<id> → live %, speed, ETA (and N of M for batches)
-   └─ GET  /api/file/<id>  → streams the finished file (or zip) to your downloads
+   │  fetch /api/cancel/<id>   → stops a running job
+   └─ GET  /api/file/<id>      → streams the finished file (or zip) to your downloads
             ▲
         app.py (Flask + yt-dlp + ffmpeg)
 ```
@@ -70,12 +110,21 @@ MP3 cover art is embedded by ffmpeg after download (in `_embed_audio_cover`),
 which is what enables the optional square crop. Tags come from yt-dlp's
 `FFmpegMetadata`, and the Artist/Title split uses its `MetadataParser`.
 
+Transcripts are read from the video's subtitle tracks (YouTube `json3`,
+WebVTT, SRT, TTML/srv) without downloading or processing any video formats.
+
 Files are staged in your system temp folder while downloading, then served to
-the browser.
+the browser. Finished files are deleted automatically after 2 hours.
+
+## Development
+
+```bash
+python -m unittest discover -s tests -v
+```
+The end-to-end tests generate small media files with ffmpeg and serve them
+from a local web server, so they don't need internet access.
 
 ## Notes
 - This is a **local** tool (binds to `127.0.0.1`). Don't expose it to the
   internet as-is.
 - Only download content you have the right to. Respect each site's terms.
-- yt-dlp updates often; if a site breaks, run
-  `python -m pip install --upgrade yt-dlp`.

@@ -15,6 +15,7 @@
     font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     display: flex; justify-content: center; padding: 32px 16px;
   }
+  a { color: var(--accent2); }
   .wrap { width: 100%; max-width: 720px; }
   h1 { font-size: 26px; margin: 0 0 4px; }
   h1 span { color: var(--accent); }
@@ -30,13 +31,14 @@
     font-size: 15px; outline: none; font-family: inherit; resize: vertical;
   }
   input[type=text]:focus, textarea:focus { border-color: var(--accent2); }
-  button {
+  button, .btn {
     cursor: pointer; border: none; border-radius: 10px; padding: 12px 18px;
     font-size: 15px; font-weight: 600; color: #fff; background: var(--accent2);
-    transition: filter .15s;
+    transition: filter .15s; text-decoration: none; display: inline-block; text-align: center;
   }
-  button:hover { filter: brightness(1.1); }
+  button:hover, .btn:hover { filter: brightness(1.1); }
   button:disabled { opacity: .5; cursor: not-allowed; }
+  .ghost { background: #2a2f3a; }
   .hidden { display: none !important; }
   .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
   .tab {
@@ -47,8 +49,8 @@
   .tab.active { color: #fff; border-color: var(--accent2); background: #18233a; }
   .meta { display: flex; gap: 16px; align-items: center; }
   .meta img { width: 160px; border-radius: 10px; flex-shrink: 0; }
-  .meta .title { font-weight: 600; font-size: 17px; }
-  .meta .by { color: var(--muted); font-size: 14px; }
+  .title { font-weight: 600; font-size: 17px; overflow-wrap: anywhere; }
+  .by { color: var(--muted); font-size: 14px; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
   .choice {
     border: 1px solid var(--line); border-radius: 12px; padding: 14px;
@@ -62,24 +64,34 @@
     width: 100%; margin-top: 10px; padding: 10px; border-radius: 8px;
     background: #0d0f13; color: var(--text); border: 1px solid var(--line);
   }
-  .opts { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-size: 14px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 14px; align-items: center; }
   .opts label { display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--muted); }
-  .opts input { width: 16px; height: 16px; accent-color: var(--accent2); }
-  .adv summary { cursor: pointer; color: var(--muted); margin: 14px 0 10px; }
+  .opts input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent2); }
+  .opts input[type=text] { width: 110px; flex: none; padding: 6px 10px; font-size: 14px; }
+  .opts select { width: auto; margin: 0; padding: 6px 8px; }
+  details > summary { cursor: pointer; color: var(--muted); }
+  .adv summary { margin: 14px 0 10px; }
+  .tablewrap { max-height: 320px; overflow: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 500; }
+  th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--card); }
   tr.fmt { cursor: pointer; }
   tr.fmt:hover td { background: #232936; }
   tr.fmt.active td { background: #18233a; }
   .go { width: 100%; margin-top: 16px; background: var(--accent); font-size: 16px; padding: 14px; }
+  .actions { display: flex; gap: 10px; }
+  .actions .go { flex: 1; }
   .bar { height: 12px; background: #0d0f13; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
   .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--ok)); transition: width .3s; }
-  .status { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .status { color: var(--muted); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
   .err { color: var(--accent); }
   .warn {
     background: #2a1f00; border: 1px solid #5c4400; color: #ffd479;
     padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 18px;
+  }
+  .info {
+    background: #13203a; border: 1px solid #27406e; color: #b9cdf5;
+    padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-top: 12px;
   }
   .spin {
     display: inline-block; width: 15px; height: 15px; border: 2px solid #ffffff55;
@@ -88,17 +100,31 @@
   }
   @keyframes r { to { transform: rotate(360deg); } }
   .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .p-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .p-label { font-weight: 600; overflow-wrap: anywhere; }
+  .small { padding: 7px 12px; font-size: 13px; flex-shrink: 0; }
+  .errlist { margin-top: 10px; font-size: 13px; }
+  .errlist ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
   .tr-item { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
   .tr-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
   .tr-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-  .tr-head .by a { color: var(--accent2); }
+  .tr-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .tr-text {
     white-space: pre-wrap; background: #0d0f13; border: 1px solid var(--line);
     border-radius: 10px; padding: 12px 14px; margin-top: 10px; max-height: 320px;
     overflow: auto; font-size: 14px;
   }
-  .small { padding: 7px 12px; font-size: 13px; flex-shrink: 0; }
-  .opts input[type=text] { width: 90px; height: auto; flex: none; padding: 6px 10px; font-size: 14px; }
+  .tr-note { font-size: 13px; color: #ffd479; margin-top: 6px; }
+  .settings summary { font-weight: 600; }
+  .settings label { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
+  .settings select { max-width: 260px; display: block; }
+  .ok { color: var(--ok); }
+  @media (max-width: 560px) {
+    .choices { grid-template-columns: 1fr; }
+    .meta { flex-direction: column; align-items: flex-start; }
+    .meta img { width: 100%; }
+    .tab { font-size: 13px; padding: 9px 4px; }
+  }
 </style>
 </head>
 <body>
@@ -112,6 +138,13 @@
     MP3 conversion, cover art, and tagging are disabled. See the README to install it.
   </div>
   {% endif %}
+  {% if not js_runtimes %}
+  <div class="warn">
+    ⚠ <b>No JavaScript runtime found.</b> yt-dlp needs one for YouTube, so YouTube
+    links may fail or offer few formats. Install <a href="https://deno.com" target="_blank" rel="noopener">Deno</a>
+    or <a href="https://nodejs.org" target="_blank" rel="noopener">Node.js</a>, then restart this app.
+  </div>
+  {% endif %}
 
   <div class="tabs">
     <div class="tab active" data-tab="single">🎬 Single video</div>
@@ -120,7 +153,7 @@
   </div>
 
   <!-- ===================== SINGLE ===================== -->
-  <div id="tab-single">
+  <div id="tab-single" class="tabpane">
     <div class="card">
       <div class="row">
         <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..." autofocus />
@@ -131,20 +164,21 @@
 
     <div id="result" class="card hidden">
       <div class="meta">
-        <img id="thumb" src="" alt="" />
+        <img id="thumb" src="" alt="" referrerpolicy="no-referrer" />
         <div>
           <div id="title" class="title"></div>
           <div id="uploader" class="by"></div>
           <div id="duration" class="by"></div>
         </div>
       </div>
+      <div id="plHint" class="info hidden"></div>
 
       <h3 style="margin:20px 0 8px">Choose what you want</h3>
       <div class="choices">
         <div class="choice active" data-mode="best">
           <h3>🎬 Video (MP4)</h3>
           <p>Best picture + sound, merged &amp; tagged.</p>
-          <select id="quality">
+          <select id="quality" data-persist>
             <option value="best">Best available</option>
             <option value="2160">4K (2160p)</option>
             <option value="1440">1440p</option>
@@ -161,130 +195,236 @@
       </div>
 
       <div class="opts">
-        <label><input type="checkbox" id="square" /> Square cover art (album style)</label>
-        <label><input type="checkbox" id="split" checked /> Clean Artist / Title from video title</label>
+        <label data-show="best" title="H.264 video + AAC audio: plays in Windows, QuickTime, phones and TVs. On YouTube this usually caps at 1080p — untick it for 1440p/4K.">
+          <input type="checkbox" id="compat" data-persist checked /> Most compatible MP4 (H.264, plays everywhere)</label>
+        <label data-show="audio"><input type="checkbox" id="square" data-persist /> Square cover art (album style)</label>
+        <label data-show="audio" title='Turns "Artist - Song (Official Video)" into artist "Artist", title "Song"'>
+          <input type="checkbox" id="split" data-persist checked /> Clean Artist / Title from video title</label>
       </div>
 
       <details class="adv">
         <summary>Advanced — pick an exact format</summary>
-        <table>
-          <thead><tr><th>Type</th><th>Res / quality</th><th>Ext</th><th>FPS</th><th>Size</th><th>id</th></tr></thead>
-          <tbody id="fmtBody"></tbody>
-        </table>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Type</th><th>Res / quality</th><th>Ext</th><th>Codec</th><th>FPS</th><th>Size</th><th>id</th></tr></thead>
+            <tbody id="fmtBody"></tbody>
+          </table>
+        </div>
       </details>
 
-      <button id="go" class="go">Download</button>
+      <div class="actions">
+        <button id="go" class="go">Download</button>
+        <button id="toTranscript" class="go ghost" style="flex:0 0 auto" title="Get this video's title, author and transcript">📝 Transcript</button>
+      </div>
     </div>
+    <div class="progress-slot"></div>
   </div>
 
   <!-- ===================== BATCH ===================== -->
-  <div id="tab-batch" class="hidden">
+  <div id="tab-batch" class="tabpane hidden">
     <div class="card">
       <textarea id="batchUrls" rows="5"
         placeholder="Paste a playlist URL, or one video link per line:&#10;https://www.youtube.com/playlist?list=...&#10;https://youtu.be/...&#10;https://youtu.be/..."></textarea>
-      <p class="hint">Playlists are expanded automatically. Everything is bundled into a single .zip.</p>
+      <p class="hint">Playlists and channels are expanded automatically. Everything is bundled into a single .zip.</p>
 
       <h3 style="margin:18px 0 8px">Format for all items</h3>
       <div class="choices">
-        <div class="choice active" data-bmode="best">
+        <div class="choice active" data-mode="best">
           <h3>🎬 Video (MP4)</h3>
           <p>Best picture + sound, merged &amp; tagged.</p>
-          <select id="bquality">
+          <select id="bquality" data-persist>
             <option value="best">Best available</option>
+            <option value="2160">4K (2160p)</option>
+            <option value="1440">1440p</option>
             <option value="1080">1080p</option>
             <option value="720">720p</option>
             <option value="480">480p</option>
             <option value="360">360p</option>
           </select>
         </div>
-        <div class="choice" data-bmode="audio">
+        <div class="choice" data-mode="audio">
           <h3>🎵 Audio (MP3)</h3>
           <p>MP3 with cover art, title &amp; artist tags.</p>
         </div>
       </div>
 
       <div class="opts">
-        <label><input type="checkbox" id="bsquare" /> Square cover art (album style)</label>
-        <label><input type="checkbox" id="bsplit" checked /> Clean Artist / Title from video title</label>
+        <label data-show="best" title="H.264 video + AAC audio: plays everywhere. On YouTube this usually caps at 1080p.">
+          <input type="checkbox" id="bcompat" data-persist checked /> Most compatible MP4 (H.264, plays everywhere)</label>
+        <label data-show="audio"><input type="checkbox" id="bsquare" data-persist /> Square cover art (album style)</label>
+        <label data-show="audio"><input type="checkbox" id="bsplit" data-persist checked /> Clean Artist / Title from video title</label>
       </div>
 
       <button id="bgo" class="go">Download all (zip)</button>
     </div>
+    <div class="progress-slot"></div>
   </div>
 
   <!-- ===================== TRANSCRIPT ===================== -->
-  <div id="tab-transcript" class="hidden">
+  <div id="tab-transcript" class="tabpane hidden">
     <div class="card">
       <textarea id="trUrls" rows="3"
         placeholder="Paste a video URL, a playlist, or one link per line:&#10;https://www.youtube.com/watch?v=..."></textarea>
       <p class="hint">Gets the title, author and full transcript (from subtitles or
-        auto-generated captions). Nothing is downloaded except the text.</p>
+        auto-generated captions). Only text is downloaded, never the video.</p>
       <div class="opts">
-        <label>Language <input type="text" id="trLang" value="en" title="Language code, e.g. en, es, de, fr. Falls back to the video's original language." /></label>
-        <label><input type="checkbox" id="trTs" /> Include timestamps</label>
+        <label title="Language code, e.g. en, es, de, fr, pt-BR. Leave empty for the language the video is spoken in.">
+          Language <input type="text" id="trLang" list="langList" data-persist placeholder="original" /></label>
+        <datalist id="langList">
+          <option value="en">English</option><option value="es">Spanish</option>
+          <option value="fr">French</option><option value="de">German</option>
+          <option value="it">Italian</option><option value="pt">Portuguese</option>
+          <option value="ru">Russian</option><option value="ja">Japanese</option>
+          <option value="ko">Korean</option><option value="zh-Hans">Chinese (Simplified)</option>
+          <option value="ar">Arabic</option><option value="hi">Hindi</option>
+          <option value="ro">Romanian</option><option value="nl">Dutch</option>
+          <option value="pl">Polish</option><option value="tr">Turkish</option>
+        </datalist>
+        <label><input type="checkbox" id="trTs" data-persist /> Timestamps</label>
+        <label><input type="checkbox" id="trDesc" data-persist /> Include description</label>
+        <label>Save as
+          <select id="trFormat" data-persist>
+            <option value="txt">Text (.txt)</option>
+            <option value="srt">Subtitles (.srt)</option>
+          </select></label>
       </div>
       <button id="trGo" class="go">Get transcript</button>
     </div>
+    <div class="progress-slot"></div>
     <div id="trResults" class="card hidden"></div>
   </div>
 
-  <!-- ===================== PROGRESS (shared) ===================== -->
-  <div id="progress" class="card hidden">
-    <div id="pLabel" style="margin-bottom:10px;font-weight:600"></div>
-    <div class="bar"><div id="pFill"></div></div>
-    <div id="pFileRow" class="hidden" style="margin-top:10px">
-      <div id="pFileLabel" style="font-size:13px;color:var(--muted);margin-bottom:4px"></div>
-      <div class="bar" style="height:8px"><div id="pFileFill"></div></div>
-    </div>
-    <div id="pStatus" class="status"></div>
-  </div>
+  <!-- ===================== SETTINGS ===================== -->
+  <details class="card settings" id="settings">
+    <summary>⚙ Settings</summary>
+    <label>Use cookies from browser
+      <select id="cookies" data-persist>
+        <option value="">None</option>
+        {% for b in browsers %}<option value="{{ b }}">{{ b|capitalize }}</option>{% endfor %}
+      </select>
+    </label>
+    <p class="hint">Fixes <i>"Sign in to confirm you're not a bot"</i>, age-restricted and
+      members-only videos. Pick the browser where you're logged in to the site.
+      On Windows, Chrome/Edge/Brave must be fully closed first; Firefox works best.</p>
+    <p class="hint">
+      ffmpeg: {% if ffmpeg %}<span class="ok">✓ found</span>{% else %}<span class="err">✗ not found</span>{% endif %}
+      &nbsp;·&nbsp; JavaScript runtime (for YouTube):
+      {% if js_runtimes %}<span class="ok">✓ {{ js_runtimes|join(", ") }}</span>{% else %}<span class="err">✗ none</span>{% endif %}
+    </p>
+  </details>
 </div>
 
+<template id="progressTpl">
+  <div class="card">
+    <div class="p-head">
+      <div class="p-label"></div>
+      <button class="small ghost p-cancel">Cancel</button>
+    </div>
+    <div class="bar"><div class="p-fill"></div></div>
+    <div class="p-file hidden" style="margin-top:10px">
+      <div class="p-file-label" style="font-size:13px;color:var(--muted);margin-bottom:4px;overflow-wrap:anywhere"></div>
+      <div class="bar" style="height:8px"><div class="p-file-fill"></div></div>
+    </div>
+    <div class="p-status status"></div>
+    <div class="p-actions"></div>
+    <details class="errlist hidden"><summary></summary><ul></ul></details>
+  </div>
+</template>
+
 <script>
-const $ = s => document.querySelector(s);
-let INFO = null, mode = "best", selectedFormat = null, bmode = "best";
+const $ = (s, root = document) => root.querySelector(s);
+const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...kids.filter(k => k !== null && k !== undefined));
+  return e;
+};
+let INFO = null, FETCHED_URL = "", selectedFormat = null;
+
+// ---- Saved settings (localStorage) ----
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("eyt:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("eyt:" + k, JSON.stringify(v)); } catch {} },
+};
+$$("[data-persist]").forEach(inp => {
+  const isBox = inp.type === "checkbox";
+  const saved = store.get(inp.id, null);
+  if (saved !== null) {
+    if (isBox) inp.checked = saved;
+    else if (inp.tagName !== "SELECT" || [...inp.options].some(o => o.value === saved)) inp.value = saved;
+  }
+  inp.addEventListener("change", () => store.set(inp.id, isBox ? inp.checked : inp.value));
+});
+const cookies = () => $("#cookies").value;
 
 function fmtDuration(s) {
   if (!s) return "";
   s = Math.round(s);
-  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
-  return (h ? h+":" : "") + String(m).padStart(h?2:1,"0") + ":" + String(sec).padStart(2,"0");
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return (h ? h + ":" : "") + String(m).padStart(h ? 2 : 1, "0") + ":" + String(sec).padStart(2, "0");
 }
 
-// ---- Tab switching ----
-document.querySelectorAll(".tab").forEach(t => {
-  t.onclick = () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-    t.classList.add("active");
-    const which = t.dataset.tab;
-    $("#tab-single").classList.toggle("hidden", which !== "single");
-    $("#tab-batch").classList.toggle("hidden", which !== "batch");
-    $("#tab-transcript").classList.toggle("hidden", which !== "transcript");
-    $("#progress").classList.add("hidden");
-  };
+// ---- Tabs ----
+function showTab(which) {
+  $$(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === which));
+  $$(".tabpane").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + which));
+  store.set("tab", which);
+}
+$$(".tab").forEach(t => t.onclick = () => showTab(t.dataset.tab));
+showTab(store.get("tab", "single"));
+
+// ---- Mode choice cards (Video / Audio), one set per tab ----
+const MODES = {};
+function setMode(pane, mode) {
+  MODES[pane.id] = mode;
+  $$(".choice", pane).forEach(c => c.classList.toggle("active", c.dataset.mode === mode));
+  // Only show options that apply to the chosen mode.
+  $$("[data-show]", pane).forEach(o => o.classList.toggle("hidden", o.dataset.show !== mode));
+  if (mode !== "format") store.set("mode:" + pane.id, mode);
+}
+["tab-single", "tab-batch"].forEach(id => {
+  const pane = document.getElementById(id);
+  $$(".choice", pane).forEach(c => {
+    c.onclick = e => {
+      if (e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return;
+      $$("#fmtBody tr").forEach(x => x.classList.remove("active"));
+      selectedFormat = null;
+      setMode(pane, c.dataset.mode);
+    };
+  });
+  setMode(pane, store.get("mode:" + id, "best"));
 });
 
 // ---- Single: fetch info ----
 $("#fetch").onclick = fetchInfo;
 $("#url").addEventListener("keydown", e => { if (e.key === "Enter") fetchInfo(); });
+$("#url").addEventListener("paste", () => setTimeout(() => {
+  if (/^https?:\/\/\S+$/.test($("#url").value.trim())) fetchInfo();
+}, 0));
+$("#url").addEventListener("input", () => {
+  // The format list belongs to the fetched link; hide it once the link changes.
+  if (INFO && $("#url").value.trim() !== FETCHED_URL) $("#result").classList.add("hidden");
+});
 
 async function fetchInfo() {
   const url = $("#url").value.trim();
   $("#fetchErr").textContent = "";
   if (!url) { $("#fetchErr").textContent = "Paste a URL first."; return; }
+  if ($("#fetch").disabled) return;
   $("#fetch").disabled = true;
   $("#fetch").innerHTML = '<span class="spin"></span>Reading';
   try {
     const r = await fetch("/api/info", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({url})
+      body: JSON.stringify({url, cookies: cookies()})
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Failed");
-    INFO = data;
+    INFO = data; FETCHED_URL = url;
     renderResult(data);
   } catch (e) {
     $("#fetchErr").textContent = e.message;
+    $("#result").classList.add("hidden");
   } finally {
     $("#fetch").disabled = false;
     $("#fetch").textContent = "Fetch";
@@ -298,155 +438,164 @@ function renderResult(d) {
   $("#uploader").textContent = d.uploader || "";
   $("#duration").textContent = d.duration ? "⏱ " + fmtDuration(d.duration) : "";
 
-  mode = "best"; selectedFormat = null;
-  document.querySelectorAll("#tab-single .choice").forEach(c =>
-    c.classList.toggle("active", c.dataset.mode === "best"));
+  const hint = $("#plHint");
+  hint.replaceChildren();
+  hint.classList.toggle("hidden", !d.playlist);
+  if (d.playlist) {
+    const n = d.playlist.count ? ` (${d.playlist.count} videos)` : "";
+    const btn = el("a", {href: "#", textContent: "Download the whole playlist →"});
+    btn.onclick = e => { e.preventDefault(); $("#batchUrls").value = FETCHED_URL; showTab("batch"); };
+    hint.append(`📃 This link is a playlist${n}${d.playlist.title ? ": “" + d.playlist.title + "”" : ""}. Showing its first video. `, btn);
+  }
+
+  selectedFormat = null;
+  const pane = $("#tab-single");
+  if (MODES[pane.id] === "format") setMode(pane, "best");
 
   const body = $("#fmtBody");
-  body.innerHTML = "";
+  body.replaceChildren();
   d.formats.forEach(f => {
-    const tr = document.createElement("tr");
-    tr.className = "fmt";
-    tr.innerHTML = `<td>${f.kind}</td><td>${f.resolution}${f.note ? " · "+f.note : ""}</td>
-      <td>${f.ext}</td><td>${f.fps || ""}</td><td>${f.size}</td><td>${f.format_id}</td>`;
+    const tr = el("tr", {className: "fmt"},
+      el("td", {textContent: f.kind}),
+      el("td", {textContent: f.resolution + (f.note ? " · " + f.note : "")}),
+      el("td", {textContent: f.ext || ""}),
+      el("td", {textContent: f.vcodec || ""}),
+      el("td", {textContent: f.fps || ""}),
+      el("td", {textContent: f.size}),
+      el("td", {textContent: f.format_id}));
     tr.onclick = () => {
-      document.querySelectorAll("#fmtBody tr").forEach(x => x.classList.remove("active"));
+      $$("#fmtBody tr").forEach(x => x.classList.remove("active"));
       tr.classList.add("active");
-      mode = "format"; selectedFormat = f;
-      document.querySelectorAll("#tab-single .choice").forEach(c => c.classList.remove("active"));
+      selectedFormat = f;
+      setMode(pane, "format");
     };
     body.appendChild(tr);
   });
 
   $("#result").classList.remove("hidden");
-  $("#progress").classList.add("hidden");
 }
 
-// ---- Choice cards (single + batch) ----
-document.querySelectorAll("#tab-single .choice").forEach(c => {
-  c.onclick = e => {
-    if (e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return;
-    document.querySelectorAll("#tab-single .choice").forEach(x => x.classList.remove("active"));
-    document.querySelectorAll("#fmtBody tr").forEach(x => x.classList.remove("active"));
-    c.classList.add("active");
-    mode = c.dataset.mode; selectedFormat = null;
-  };
-});
-document.querySelectorAll("#tab-batch .choice").forEach(c => {
-  c.onclick = e => {
-    if (e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return;
-    document.querySelectorAll("#tab-batch .choice").forEach(x => x.classList.remove("active"));
-    c.classList.add("active");
-    bmode = c.dataset.bmode;
-  };
-});
-
 // ---- Single: download ----
-$("#go").onclick = async () => {
-  const url = $("#url").value.trim();
+$("#go").onclick = () => {
+  const mode = MODES["tab-single"];
   const payload = {
-    url, mode,
-    square: $("#square").checked,
-    split: $("#split").checked,
+    url: FETCHED_URL, mode, cookies: cookies(),
+    square: $("#square").checked, split: $("#split").checked, compat: $("#compat").checked,
+    quality: $("#quality").value,
   };
-  if (mode === "best") payload.quality = $("#quality").value;
   if (mode === "format" && selectedFormat) {
     payload.format_id = selectedFormat.format_id;
     payload.needs_audio = selectedFormat.has_video && !selectedFormat.has_audio;
   }
-  await startJob("/api/download", payload, $("#go"));
+  startJob("/api/download", payload, $("#go"), $("#tab-single .progress-slot"));
+};
+
+$("#toTranscript").onclick = () => {
+  $("#trUrls").value = FETCHED_URL;
+  showTab("transcript");
+  $("#trGo").click();
 };
 
 // ---- Batch: download ----
-$("#bgo").onclick = async () => {
+$("#bgo").onclick = () => {
   const urls = $("#batchUrls").value.trim();
   if (!urls) { alert("Paste a playlist URL or some links first."); return; }
   const payload = {
-    urls, mode: bmode,
+    urls, mode: MODES["tab-batch"], cookies: cookies(),
     quality: $("#bquality").value,
-    square: $("#bsquare").checked,
-    split: $("#bsplit").checked,
+    square: $("#bsquare").checked, split: $("#bsplit").checked, compat: $("#bcompat").checked,
   };
-  await startJob("/api/batch", payload, $("#bgo"));
+  startJob("/api/batch", payload, $("#bgo"), $("#tab-batch .progress-slot"));
 };
 
 // ---- Transcript ----
-$("#trGo").onclick = async () => {
+$("#trGo").onclick = () => {
   const urls = $("#trUrls").value.trim();
   if (!urls) { alert("Paste a video URL first."); return; }
   $("#trResults").classList.add("hidden");
-  const payload = {urls, lang: $("#trLang").value.trim() || "en", timestamps: $("#trTs").checked};
-  await startJob("/api/transcript", payload, $("#trGo"), renderTranscripts);
+  const payload = {
+    urls, cookies: cookies(),
+    lang: $("#trLang").value.trim(),
+    timestamps: $("#trTs").checked,
+    description: $("#trDesc").checked,
+    format: $("#trFormat").value,
+  };
+  startJob("/api/transcript", payload, $("#trGo"), $("#tab-transcript .progress-slot"), renderTranscripts);
 };
 
 function copyText(text, btn) {
   const done = () => { const o = btn.textContent; btn.textContent = "✓ Copied"; setTimeout(() => btn.textContent = o, 1500); };
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(done);
-  } else {
-    const ta = document.createElement("textarea");
-    ta.value = text; document.body.appendChild(ta); ta.select();
-    document.execCommand("copy"); ta.remove(); done();
-  }
+    navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
 }
-
-function transcriptAsText(r) {
-  let head = `Title:  ${r.title}\nAuthor: ${r.author}\nURL:    ${r.url}`;
-  if (r.language) head += `\nLanguage: ${r.language}${r.auto ? " (auto-generated)" : ""}`;
-  return head + "\n\n" + (r.text || `[${r.error || "No transcript."}]`);
+function fallbackCopy(text, done) {
+  const ta = el("textarea", {value: text});
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  document.execCommand("copy"); ta.remove(); done();
 }
 
 function renderTranscripts(job) {
   const box = $("#trResults");
-  box.innerHTML = "";
+  box.replaceChildren();
   (job.transcripts || []).forEach(r => {
-    const item = document.createElement("div");
-    item.className = "tr-item";
-    const head = document.createElement("div");
-    head.className = "tr-head";
-    const meta = document.createElement("div");
-    const t = document.createElement("div"); t.className = "title"; t.style.fontWeight = "600";
-    t.textContent = r.title || "(untitled)";
-    const by = document.createElement("div"); by.className = "by"; by.style.color = "var(--muted)";
-    const a = document.createElement("a"); a.href = r.url; a.target = "_blank"; a.rel = "noopener";
-    a.textContent = r.author || "Unknown author";
-    by.appendChild(a);
-    let bits = [];
+    const by = el("div", {className: "by"},
+      el("a", {href: r.url, target: "_blank", rel: "noopener noreferrer", textContent: r.author || "Unknown author"}));
+    const bits = [];
+    if (r.upload_date) bits.push("📅 " + r.upload_date);
     if (r.duration) bits.push("⏱ " + fmtDuration(r.duration));
     if (r.language) bits.push("🗣 " + r.language + (r.auto ? " (auto-generated)" : ""));
     if (bits.length) by.append("  ·  " + bits.join("  ·  "));
-    meta.append(t, by);
-    const btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "6px";
-    const cAll = document.createElement("button"); cAll.className = "small"; cAll.textContent = "Copy all";
-    cAll.onclick = () => copyText(transcriptAsText(r), cAll);
-    btns.appendChild(cAll);
+
+    const btns = el("div", {className: "tr-btns"});
+    const cAll = el("button", {className: "small", textContent: "Copy all", title: "Title, author, details and transcript"});
+    cAll.onclick = () => copyText(r.formatted, cAll);
+    btns.append(cAll);
     if (r.text) {
-      const cTxt = document.createElement("button"); cTxt.className = "small"; cTxt.textContent = "Copy transcript";
-      cTxt.style.background = "#2a2f3a";
+      const cTxt = el("button", {className: "small ghost", textContent: "Copy transcript"});
       cTxt.onclick = () => copyText(r.text, cTxt);
-      btns.appendChild(cTxt);
+      btns.append(cTxt);
     }
-    head.append(meta, btns);
-    const body = document.createElement("div");
-    body.className = "tr-text";
+
+    const item = el("div", {className: "tr-item"},
+      el("div", {className: "tr-head"},
+        el("div", {}, el("div", {className: "title", textContent: r.title || "(untitled)"}), by),
+        btns));
+    if (r.note) item.append(el("div", {className: "tr-note", textContent: "ℹ " + r.note}));
+    if (r.available && r.available.length > 1)
+      item.append(el("div", {className: "hint", textContent: "Available languages: " + r.available.join(", ")}));
+    if (r.description) {
+      item.append(el("details", {style: "margin-top:10px"},
+        el("summary", {textContent: "Description"}),
+        el("div", {className: "tr-text", textContent: r.description})));
+    }
+    const body = el("div", {className: "tr-text"});
     if (r.text) body.textContent = r.text;
     else { body.textContent = r.error || "No transcript available."; body.classList.add("err"); }
-    item.append(head, body);
-    box.appendChild(item);
+    item.append(body);
+    box.append(item);
   });
   box.classList.remove("hidden");
 }
 
-// ---- Shared job runner ----
-async function startJob(endpoint, payload, btn, onDone) {
+// ---- Shared job runner: each tab has its own progress card ----
+async function startJob(endpoint, payload, btn, slot, onDone) {
+  const card = $("#progressTpl").content.firstElementChild.cloneNode(true);
+  slot.replaceChildren(card);
+  const ui = {
+    card, label: $(".p-label", card), fill: $(".p-fill", card), status: $(".p-status", card),
+    fileRow: $(".p-file", card), fileLabel: $(".p-file-label", card), fileFill: $(".p-file-fill", card),
+    actions: $(".p-actions", card), cancel: $(".p-cancel", card), errs: $(".errlist", card),
+  };
+  ui.setLabel = (text, spin = true) => {
+    ui.label.replaceChildren();
+    if (spin) ui.label.append(el("span", {className: "spin"}));
+    ui.label.append(text);
+  };
+  ui.setLabel("Starting…");
   btn.disabled = true;
-  $("#progress").classList.remove("hidden");
-  $("#pFill").style.width = "0%";
-  $("#pFileFill").style.width = "0%";
-  $("#pFileRow").classList.add("hidden");
-  $("#pLabel").innerHTML = '<span class="spin"></span>Starting…';
-  $("#pStatus").textContent = "";
-  $("#progress").scrollIntoView({behavior: "smooth", block: "nearest"});
+  card.scrollIntoView({behavior: "smooth", block: "nearest"});
   try {
     const r = await fetch(endpoint, {
       method: "POST", headers: {"Content-Type": "application/json"},
@@ -454,75 +603,92 @@ async function startJob(endpoint, payload, btn, onDone) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Failed to start");
-    poll(data.job_id, btn, onDone);
+    ui.cancel.onclick = async () => {
+      ui.cancel.disabled = true;
+      ui.cancel.textContent = "Cancelling…";
+      try { await fetch("/api/cancel/" + data.job_id, {method: "POST"}); } catch {}
+    };
+    poll(data.job_id, ui, btn, onDone);
   } catch (e) {
-    $("#pLabel").innerHTML = '<span class="err">✖ ' + e.message + '</span>';
+    ui.setLabel("✖ " + e.message, false);
+    ui.label.classList.add("err");
+    ui.cancel.classList.add("hidden");
     btn.disabled = false;
   }
 }
 
-function poll(jobId, btn, onDone) {
+function showErrors(ui, errors) {
+  if (!errors || !errors.length) return;
+  ui.errs.classList.remove("hidden");
+  $("summary", ui.errs).textContent = `⚠ ${errors.length} item(s) failed — details`;
+  $("ul", ui.errs).replaceChildren(...errors.map(e => el("li", {textContent: e})));
+}
+
+function poll(jobId, ui, btn, onDone) {
+  let failures = 0;
+  const finish = () => {
+    clearInterval(iv);
+    btn.disabled = false;
+    ui.cancel.classList.add("hidden");
+    ui.fileRow.classList.add("hidden");
+  };
   const iv = setInterval(async () => {
+    let j;
     try {
       const r = await fetch("/api/progress/" + jobId);
-      const j = await r.json();
-      const batch = (j.file_progress !== undefined && j.total > 1);
-      $("#pFileRow").classList.toggle("hidden", !batch);
-      if (j.status === "finished") {
-        clearInterval(iv);
-        $("#pFileRow").classList.add("hidden");
-        $("#pFill").style.width = "100%";
-        let done = j.filename || "file";
-        let extra = (j.total && j.failed_count)
-          ? ` (${j.done_count}/${j.total} ok, ${j.failed_count} failed)` : "";
-        $("#pLabel").innerHTML = '✅ Done — <b>' + done + '</b>' + extra;
-        $("#pStatus").innerHTML = "";
-        const a = document.createElement("a");
-        a.href = "/api/file/" + jobId;
-        a.className = "go"; a.style.display = "inline-block";
-        a.style.textDecoration = "none"; a.style.textAlign = "center";
-        a.style.background = "var(--ok)"; a.style.marginTop = "12px";
-        a.textContent = "⬇ Save " + (done.endsWith(".zip") ? "zip" : "file");
-        $("#pStatus").appendChild(a);
-        btn.disabled = false;
-        if (onDone) {
-          // Show results in the page; the file is offered via the button only.
-          a.textContent = "⬇ Save .txt";
-          onDone(j);
-        } else {
-          window.location = a.href;
-        }
-      } else if (j.status === "error") {
-        clearInterval(iv);
-        $("#pLabel").innerHTML = '<span class="err">✖ Error</span>';
-        $("#pStatus").textContent = j.error || "Unknown error";
-        btn.disabled = false;
-      } else if (j.status === "processing") {
-        $("#pLabel").innerHTML = '<span class="spin"></span>' + (j.label || "Processing…");
-        $("#pFill").style.width = (j.progress || 99) + "%";
-        $("#pStatus").textContent = "Almost there…";
-      } else { // starting / listing / downloading
-        $("#pLabel").innerHTML = '<span class="spin"></span>' + (j.label || "Working…");
-        $("#pFill").style.width = (j.progress || 0) + "%";
-        let bits = [];
-        if (batch) {
-          // Main bar = overall; sub-bar = the file currently downloading.
-          $("#pFileFill").style.width = (j.file_progress || 0) + "%";
-          $("#pFileLabel").textContent =
-            "▶ " + (j.current_title || "") + "  —  " + (j.file_progress || 0) + "%";
-          bits.push("Overall " + (j.progress || 0) + "%");
-          if (j.current && j.total) bits.push(j.current + "/" + j.total);
-        } else if (j.progress) {
-          bits.push(j.progress + "%");
-        }
-        if (j.speed) bits.push(j.speed);
-        if (j.eta) bits.push("ETA " + j.eta + "s");
-        $("#pStatus").textContent = bits.filter(Boolean).join("   ·   ");
-      }
+      j = await r.json();
+      if (!r.ok) { failures = 99; throw new Error(j.error || "Lost track of this job."); }
+      failures = 0;
     } catch (e) {
-      clearInterval(iv);
-      $("#pStatus").textContent = "Lost connection to server.";
-      btn.disabled = false;
+      if (++failures >= 5) {
+        finish();
+        ui.setLabel("✖ Lost connection to the server.", false);
+        ui.label.classList.add("err");
+        ui.status.textContent = e.message + " Is the app still running?";
+      }
+      return;
+    }
+    const batch = j.file_progress !== undefined && j.total > 1;
+    ui.fileRow.classList.toggle("hidden", !batch);
+    showErrors(ui, j.errors);
+
+    if (j.status === "finished") {
+      finish();
+      ui.fill.style.width = "100%";
+      const extra = (j.total > 1 && j.failed_count) ? ` (${j.done_count}/${j.total} ok)` : "";
+      ui.label.replaceChildren("✅ Done" + extra);
+      if (j.filename) ui.label.append(" — ", el("b", {textContent: j.filename}));
+      ui.status.textContent = "";
+      if (j.filename) {
+        const ext = j.filename.split(".").pop();
+        const a = el("a", {href: "/api/file/" + jobId, className: "btn go", textContent: "⬇ Save ." + ext});
+        a.style.background = "var(--ok)";
+        ui.actions.replaceChildren(a);
+        if (!onDone) window.location = a.href;  // downloads start by themselves
+      }
+      if (onDone) onDone(j);
+    } else if (j.status === "error" || j.status === "cancelled") {
+      finish();
+      ui.setLabel(j.status === "cancelled" ? "⏹ Cancelled" : "✖ Error", false);
+      ui.label.classList.toggle("err", j.status === "error");
+      ui.status.textContent = j.status === "error" ? (j.error || "Unknown error") : "";
+    } else {
+      ui.setLabel(j.label || "Working…");
+      ui.fill.style.width = (j.progress || 0) + "%";
+      const bits = [];
+      if (batch) {
+        // Main bar = overall; sub-bar = the file currently downloading.
+        ui.fileFill.style.width = (j.file_progress || 0) + "%";
+        ui.fileLabel.textContent = "▶ " + (j.current_title || "") + "  —  " + (j.stage || (j.file_progress || 0) + "%");
+        bits.push("Overall " + (j.progress || 0) + "%");
+      } else if (j.status === "processing") {
+        bits.push("Almost there…");
+      } else if (j.progress) {
+        bits.push(j.progress + "%");
+      }
+      if (j.speed) bits.push(j.speed);
+      if (j.eta) bits.push("ETA " + fmtDuration(j.eta));
+      ui.status.textContent = bits.join("   ·   ");
     }
   }, 600);
 }
