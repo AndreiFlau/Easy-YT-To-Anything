@@ -88,6 +88,17 @@
   }
   @keyframes r { to { transform: rotate(360deg); } }
   .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .tr-item { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .tr-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  .tr-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .tr-head .by a { color: var(--accent2); }
+  .tr-text {
+    white-space: pre-wrap; background: #0d0f13; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin-top: 10px; max-height: 320px;
+    overflow: auto; font-size: 14px;
+  }
+  .small { padding: 7px 12px; font-size: 13px; flex-shrink: 0; }
+  .opts input[type=text] { width: 90px; height: auto; flex: none; padding: 6px 10px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -105,6 +116,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="single">🎬 Single video</div>
     <div class="tab" data-tab="batch">📃 Playlist / batch</div>
+    <div class="tab" data-tab="transcript">📝 Transcript</div>
   </div>
 
   <!-- ===================== SINGLE ===================== -->
@@ -200,6 +212,22 @@
     </div>
   </div>
 
+  <!-- ===================== TRANSCRIPT ===================== -->
+  <div id="tab-transcript" class="hidden">
+    <div class="card">
+      <textarea id="trUrls" rows="3"
+        placeholder="Paste a video URL, a playlist, or one link per line:&#10;https://www.youtube.com/watch?v=..."></textarea>
+      <p class="hint">Gets the title, author and full transcript (from subtitles or
+        auto-generated captions). Nothing is downloaded except the text.</p>
+      <div class="opts">
+        <label>Language <input type="text" id="trLang" value="en" title="Language code, e.g. en, es, de, fr. Falls back to the video's original language." /></label>
+        <label><input type="checkbox" id="trTs" /> Include timestamps</label>
+      </div>
+      <button id="trGo" class="go">Get transcript</button>
+    </div>
+    <div id="trResults" class="card hidden"></div>
+  </div>
+
   <!-- ===================== PROGRESS (shared) ===================== -->
   <div id="progress" class="card hidden">
     <div id="pLabel" style="margin-bottom:10px;font-weight:600"></div>
@@ -231,6 +259,7 @@ document.querySelectorAll(".tab").forEach(t => {
     const which = t.dataset.tab;
     $("#tab-single").classList.toggle("hidden", which !== "single");
     $("#tab-batch").classList.toggle("hidden", which !== "batch");
+    $("#tab-transcript").classList.toggle("hidden", which !== "transcript");
     $("#progress").classList.add("hidden");
   };
 });
@@ -341,8 +370,75 @@ $("#bgo").onclick = async () => {
   await startJob("/api/batch", payload, $("#bgo"));
 };
 
+// ---- Transcript ----
+$("#trGo").onclick = async () => {
+  const urls = $("#trUrls").value.trim();
+  if (!urls) { alert("Paste a video URL first."); return; }
+  $("#trResults").classList.add("hidden");
+  const payload = {urls, lang: $("#trLang").value.trim() || "en", timestamps: $("#trTs").checked};
+  await startJob("/api/transcript", payload, $("#trGo"), renderTranscripts);
+};
+
+function copyText(text, btn) {
+  const done = () => { const o = btn.textContent; btn.textContent = "✓ Copied"; setTimeout(() => btn.textContent = o, 1500); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove(); done();
+  }
+}
+
+function transcriptAsText(r) {
+  let head = `Title:  ${r.title}\nAuthor: ${r.author}\nURL:    ${r.url}`;
+  if (r.language) head += `\nLanguage: ${r.language}${r.auto ? " (auto-generated)" : ""}`;
+  return head + "\n\n" + (r.text || `[${r.error || "No transcript."}]`);
+}
+
+function renderTranscripts(job) {
+  const box = $("#trResults");
+  box.innerHTML = "";
+  (job.transcripts || []).forEach(r => {
+    const item = document.createElement("div");
+    item.className = "tr-item";
+    const head = document.createElement("div");
+    head.className = "tr-head";
+    const meta = document.createElement("div");
+    const t = document.createElement("div"); t.className = "title"; t.style.fontWeight = "600";
+    t.textContent = r.title || "(untitled)";
+    const by = document.createElement("div"); by.className = "by"; by.style.color = "var(--muted)";
+    const a = document.createElement("a"); a.href = r.url; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = r.author || "Unknown author";
+    by.appendChild(a);
+    let bits = [];
+    if (r.duration) bits.push("⏱ " + fmtDuration(r.duration));
+    if (r.language) bits.push("🗣 " + r.language + (r.auto ? " (auto-generated)" : ""));
+    if (bits.length) by.append("  ·  " + bits.join("  ·  "));
+    meta.append(t, by);
+    const btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "6px";
+    const cAll = document.createElement("button"); cAll.className = "small"; cAll.textContent = "Copy all";
+    cAll.onclick = () => copyText(transcriptAsText(r), cAll);
+    btns.appendChild(cAll);
+    if (r.text) {
+      const cTxt = document.createElement("button"); cTxt.className = "small"; cTxt.textContent = "Copy transcript";
+      cTxt.style.background = "#2a2f3a";
+      cTxt.onclick = () => copyText(r.text, cTxt);
+      btns.appendChild(cTxt);
+    }
+    head.append(meta, btns);
+    const body = document.createElement("div");
+    body.className = "tr-text";
+    if (r.text) body.textContent = r.text;
+    else { body.textContent = r.error || "No transcript available."; body.classList.add("err"); }
+    item.append(head, body);
+    box.appendChild(item);
+  });
+  box.classList.remove("hidden");
+}
+
 // ---- Shared job runner ----
-async function startJob(endpoint, payload, btn) {
+async function startJob(endpoint, payload, btn, onDone) {
   btn.disabled = true;
   $("#progress").classList.remove("hidden");
   $("#pFill").style.width = "0%";
@@ -358,14 +454,14 @@ async function startJob(endpoint, payload, btn) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Failed to start");
-    poll(data.job_id, btn);
+    poll(data.job_id, btn, onDone);
   } catch (e) {
     $("#pLabel").innerHTML = '<span class="err">✖ ' + e.message + '</span>';
     btn.disabled = false;
   }
 }
 
-function poll(jobId, btn) {
+function poll(jobId, btn, onDone) {
   const iv = setInterval(async () => {
     try {
       const r = await fetch("/api/progress/" + jobId);
@@ -389,7 +485,13 @@ function poll(jobId, btn) {
         a.textContent = "⬇ Save " + (done.endsWith(".zip") ? "zip" : "file");
         $("#pStatus").appendChild(a);
         btn.disabled = false;
-        window.location = a.href;
+        if (onDone) {
+          // Show results in the page; the file is offered via the button only.
+          a.textContent = "⬇ Save .txt";
+          onDone(j);
+        } else {
+          window.location = a.href;
+        }
       } else if (j.status === "error") {
         clearInterval(iv);
         $("#pLabel").innerHTML = '<span class="err">✖ Error</span>';

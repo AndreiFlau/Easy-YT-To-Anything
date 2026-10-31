@@ -17,6 +17,11 @@ Paste a video URL, pick a format, download. No command line needed.
     proper `artist` + `title` tags.
 - 📃 **Playlist / batch** — paste a playlist URL or many links (one per line);
   everything downloads and is bundled into a single **.zip**.
+- 📝 **Transcript** — get a video's **title, author and full transcript** as
+  text, from its subtitles or YouTube's auto-generated captions. Choose a
+  language (falls back to the original language) and optional timestamps.
+  Copy it from the page or save it as a `.txt`. Works with playlists and
+  multiple links too; everything goes into one text file.
 - 🛠 **Advanced** — pick any exact format yt-dlp exposes (every resolution,
   codec, and container the site offers).
 - 📊 Live progress bar with speed and ETA (and an `N of M` counter for batches).
@@ -54,6 +59,7 @@ Browser (templates/index.html)
    │  fetch /api/info      → yt-dlp probes the URL, returns formats
    │  fetch /api/download  → starts a background single-file job, returns a job id
    │  fetch /api/batch     → expands playlists, downloads all, zips them
+   │  fetch /api/transcript → title + author + transcript (subtitles → .txt)
    │  poll  /api/progress/<id> → live %, speed, ETA (and N of M for batches)
    └─ GET  /api/file/<id>  → streams the finished file (or zip) to your downloads
             ▲

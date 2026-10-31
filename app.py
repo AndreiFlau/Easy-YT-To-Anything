@@ -5,7 +5,10 @@ browser UI. Paste a URL (or a playlist), pick a format, download.
 Run:  python app.py   (then open http://127.0.0.1:5000)
 """
 
+import html
+import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -473,6 +476,276 @@ def api_batch():
             data.get("quality", "best"),
             data.get("square", False),
             data.get("split", True),
+        ),
+        daemon=True,
+    ).start()
+    return jsonify({"job_id": job_id})
+
+
+# --------------------------------------------------------------------------- #
+# Title + author + transcript
+# --------------------------------------------------------------------------- #
+# Subtitle formats we know how to turn into plain text, best first.
+TRANSCRIPT_EXTS = ("json3", "vtt", "srt")
+
+
+def _lang_matches(key, want):
+    """'en' matches 'en', 'en-US', 'en-GB', 'en-orig' (case-insensitive)."""
+    key, want = key.lower(), want.lower()
+    return key == want or key.startswith(want + "-")
+
+
+def _pick_track(info, want):
+    """Choose the best subtitle track for language `want`.
+
+    Order: manual subs in `want` → auto captions in `want` → manual subs in
+    the video's own language / any language → auto captions in the original
+    spoken language. Returns (lang_key, [formats], is_auto) or None.
+    """
+    manual = {k: v for k, v in (info.get("subtitles") or {}).items()
+              if v and k != "live_chat"}
+    auto = {k: v for k, v in (info.get("automatic_captions") or {}).items() if v}
+    want = (want or "").strip()
+    orig = (info.get("language") or "").strip()
+
+    def find(tracks, lang, prefer_orig=False):
+        if not lang:
+            return None
+        keys = [k for k in tracks if _lang_matches(k, lang)]
+        if not keys:
+            return None
+        # "en" beats "en-US"; for auto captions "en-orig" is the untranslated one.
+        keys.sort(key=lambda k: (
+            not (prefer_orig and k.endswith("-orig")),
+            k.lower() != lang.lower(),
+            len(k),
+        ))
+        return keys[0]
+
+    for tracks, lang, is_auto in (
+        (manual, want, False),
+        (auto, want, True),
+        (manual, orig, False),
+    ):
+        k = find(tracks, lang, prefer_orig=is_auto)
+        if k:
+            return k, tracks[k], is_auto
+    if manual:
+        k = sorted(manual)[0]
+        return k, manual[k], False
+    # Auto captions: the "-orig" track (or the video's language) is the real
+    # speech-to-text; everything else is a machine translation of it.
+    k = next((k for k in auto if k.endswith("-orig")), None) or find(auto, orig)
+    if k:
+        return k, auto[k], True
+    return None
+
+
+def _ts(seconds):
+    seconds = int(seconds or 0)
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def _parse_json3(raw):
+    """YouTube's json3 captions -> [(start_s, end_s, text)]."""
+    cues = []
+    for ev in json.loads(raw).get("events", []):
+        segs = ev.get("segs")
+        if not segs:
+            continue
+        text = "".join(s.get("utf8", "") for s in segs).replace("\n", " ").strip()
+        if not text:
+            continue
+        start = ev.get("tStartMs", 0) / 1000
+        cues.append((start, start + ev.get("dDurationMs", 0) / 1000, text))
+    return cues
+
+
+def _vtt_time(t):
+    parts = t.strip().replace(",", ".").split(":")
+    secs = 0.0
+    for p in parts:
+        secs = secs * 60 + float(p)
+    return secs
+
+
+def _parse_vtt(raw):
+    """WebVTT or SRT -> [(start_s, end_s, text)], with auto-caption repeats removed."""
+    cues, last_line = [], None
+    for block in re.split(r"\r?\n\s*\r?\n", raw.replace("﻿", "")):
+        lines = block.strip().splitlines()
+        idx = next((i for i, l in enumerate(lines) if "-->" in l), None)
+        if idx is None:
+            continue
+        start_s, _, rest = lines[idx].partition("-->")
+        try:
+            start, end = _vtt_time(start_s), _vtt_time(rest.split()[0])
+        except (ValueError, IndexError):
+            continue
+        new = []
+        for line in lines[idx + 1:]:
+            line = html.unescape(re.sub(r"<[^>]+>", "", line)).strip()
+            # YouTube auto-captions re-show the previous line in every cue.
+            if line and line != last_line:
+                new.append(line)
+                last_line = line
+        if new:
+            cues.append((start, end, " ".join(new)))
+    return cues
+
+
+def _cues_to_text(cues, timestamps):
+    if timestamps:
+        return "\n".join(f"[{_ts(s)}] {t}" for s, _, t in cues)
+    # Plain prose: start a new paragraph wherever the speaker pauses.
+    paras, cur, prev_end = [], [], None
+    for start, end, text in cues:
+        if cur and prev_end is not None and start - prev_end > 2.0:
+            paras.append(" ".join(cur))
+            cur = []
+        cur.append(text)
+        prev_end = max(end, start)
+    if cur:
+        paras.append(" ".join(cur))
+    return "\n\n".join(" ".join(p.split()) for p in paras)
+
+
+def get_transcript(url, lang="en", timestamps=False):
+    """Return {title, author, url, language, auto, text, error} for one video."""
+    opts = {**base_ydl_opts(), "skip_download": True}
+    with YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        if info.get("_type") == "playlist" and info.get("entries"):
+            info = info["entries"][0]
+
+        result = {
+            "title": info.get("title") or "",
+            "author": (info.get("uploader") or info.get("channel")
+                       or info.get("creator") or ""),
+            "url": info.get("webpage_url") or url,
+            "duration": info.get("duration"),
+            "language": None,
+            "auto": False,
+            "text": "",
+            "error": None,
+        }
+
+        picked = _pick_track(info, lang)
+        if not picked:
+            result["error"] = "No subtitles or captions available for this video."
+            return result
+        key, formats, is_auto = picked
+        by_ext = {f.get("ext"): f for f in formats if f.get("url")}
+        fmt = next((by_ext[e] for e in TRANSCRIPT_EXTS if e in by_ext), None)
+        if not fmt:
+            result["error"] = (
+                "Captions exist but only in unsupported formats: "
+                + ", ".join(sorted(by_ext))
+            )
+            return result
+
+        raw = ydl.urlopen(fmt["url"]).read().decode("utf-8", errors="replace")
+
+    cues = _parse_json3(raw) if fmt["ext"] == "json3" else _parse_vtt(raw)
+    result.update(
+        language=key.removesuffix("-orig"),
+        auto=is_auto,
+        text=_cues_to_text(cues, timestamps),
+    )
+    if not result["text"]:
+        result["error"] = "The caption track was empty."
+    return result
+
+
+def _format_transcript(r):
+    head = [f"Title:  {r['title']}", f"Author: {r['author']}", f"URL:    {r['url']}"]
+    if r.get("language"):
+        head.append(
+            f"Language: {r['language']}"
+            + (" (auto-generated)" if r.get("auto") else "")
+        )
+    body = r["text"] or f"[{r.get('error') or 'No transcript.'}]"
+    return "\n".join(head) + "\n\n" + body + "\n"
+
+
+def _safe_name(s, limit=120):
+    bad = '<>:"/\\|?*\n\r\t'
+    s = "".join("_" if c in bad else c for c in (s or "")).strip(" .")
+    return s[:limit] or "transcript"
+
+
+def _run_transcripts(job_id, raw_urls, lang, timestamps):
+    set_job(job_id, status="listing", progress=0, label="Reading links…")
+    items = _expand_urls(raw_urls)
+    total = len(items)
+    if not total:
+        set_job(job_id, status="error", error="No videos found at those links.")
+        return
+
+    results = []
+    for i, it in enumerate(items):
+        set_job(
+            job_id,
+            status="downloading",
+            progress=round(i / total * 100, 1),
+            label=f"Fetching transcript {i + 1} of {total}",
+            current_title=it["title"],
+            current=i + 1,
+            total=total,
+        )
+        try:
+            r = get_transcript(it["url"], lang=lang, timestamps=timestamps)
+        except Exception as exc:  # noqa: BLE001
+            r = {"title": it["title"], "author": "", "url": it["url"],
+                 "language": None, "auto": False, "text": "", "error": str(exc)}
+        results.append(r)
+
+    set_job(job_id, status="processing", progress=99.0, label="Writing file…")
+    out_dir = os.path.join(DOWNLOAD_ROOT, job_id)
+    if total == 1:
+        r = results[0]
+        name = _safe_name(f"{r['title']} - {r['author']}" if r["author"] else r["title"])
+        path = os.path.join(out_dir, name + ".txt")
+    else:
+        path = os.path.join(out_dir, f"transcripts ({total} videos).txt")
+    sep = "\n" + "=" * 72 + "\n\n"
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(sep.join(_format_transcript(r) for r in results))
+
+    set_job(
+        job_id,
+        status="finished",
+        progress=100.0,
+        filepath=path,
+        filename=os.path.basename(path),
+        transcripts=results,
+        total=total,
+        done_count=sum(1 for r in results if r["text"]),
+        failed_count=sum(1 for r in results if not r["text"]),
+    )
+
+
+@app.route("/api/transcript", methods=["POST"])
+def api_transcript():
+    """Get title, author and transcript for one or more videos / playlists."""
+    data = request.json or {}
+    raw = data.get("urls") or data.get("url") or ""
+    urls = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not urls:
+        return jsonify({"error": "Paste a video URL (or several, one per line)."}), 400
+
+    job_id = uuid.uuid4().hex
+    os.makedirs(os.path.join(DOWNLOAD_ROOT, job_id), exist_ok=True)
+    set_job(job_id, status="starting", progress=0, label="Starting…")
+    threading.Thread(
+        target=_run_transcripts,
+        args=(
+            job_id,
+            urls,
+            (data.get("lang") or "en").strip(),
+            bool(data.get("timestamps", False)),
         ),
         daemon=True,
     ).start()
