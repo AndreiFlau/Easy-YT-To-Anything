@@ -82,6 +82,7 @@
   .go { width: 100%; margin-top: 16px; background: var(--accent); font-size: 16px; padding: 14px; }
   .actions { display: flex; gap: 10px; }
   .actions .go { flex: 1; }
+  .actions .go.ghost { flex: 0 0 auto; width: auto; background: #2a2f3a; }
   .bar { height: 12px; background: #0d0f13; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
   .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--ok)); transition: width .3s; }
   .status { color: var(--muted); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
@@ -215,7 +216,7 @@
 
       <div class="actions">
         <button id="go" class="go">Download</button>
-        <button id="toTranscript" class="go ghost" style="flex:0 0 auto" title="Get this video's title, author and transcript">📝 Transcript</button>
+        <button id="toTranscript" class="go ghost" title="Get this video's title, author and transcript">📝 Transcript</button>
       </div>
     </div>
     <div class="progress-slot"></div>
