@@ -166,8 +166,9 @@
       system tray too). Firefox works best: recent Chrome and Edge may refuse, and then
       a cookies.txt file is the way to go.</p>
     <div id="loginFile" class="hidden">
-      <p class="hint">While logged in to the site, export its cookies with a "cookies.txt"
-        browser extension, then load the file here.</p>
+      <p class="hint">While logged in to the site, export its cookies with
+        <b>Get cookies.txt LOCALLY</b> (Chrome, Edge) or <b>cookies.txt</b> (Firefox), then load
+        the file here. Avoid the similar "Get cookies.txt": it was removed as malware.</p>
       <input type="file" id="cookieFile" accept=".txt,text/plain" style="margin-top:10px" />
       <textarea id="cookiePaste" rows="2" autocomplete="off" spellcheck="false"
         placeholder="…or paste the file's contents here" style="margin-top:10px"></textarea>
@@ -176,7 +177,7 @@
       <p class="hint">⚠ This file <b>is</b> your login: anyone who gets it can use your
         account, so don't share it, and delete it once it's loaded. The app keeps it only in
         this page's memory and never saves it; it's gone when you reload or close the tab.
-        Heavy downloading while logged in can get an account rate-limited.</p>
+        Downloading with an account can get it banned, so go easy or use a spare one.</p>
     </div>
   </details>
 

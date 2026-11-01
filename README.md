@@ -89,8 +89,14 @@ the page and choose one:
 
 - **A browser you're logged in with.** Fully close it first. Firefox works best;
   recent Chrome and Edge may refuse to share their cookies.
-- **A cookies.txt file.** While logged in, export the site's cookies with a
-  "cookies.txt" browser extension, then load or paste the file.
+- **A cookies.txt file.** While logged in, export the site's cookies with
+  **Get cookies.txt LOCALLY** (Chrome, Edge) or **cookies.txt** (Firefox), the
+  extensions [yt-dlp recommends](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp),
+  then load or paste the file. Avoid the similar "Get cookies.txt": it was reported
+  as malware and removed from the Chrome Web Store.
+
+Using an account with yt-dlp can get it banned, temporarily or permanently. Keep
+downloads modest, or use a spare account.
 
 A cookies.txt file **is** your login, so anyone who gets it can use your account.
 Don't share it, and delete it once it's loaded. How the app treats it:
