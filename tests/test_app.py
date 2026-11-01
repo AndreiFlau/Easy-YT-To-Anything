@@ -171,9 +171,12 @@ class EndToEndTests(unittest.TestCase):
                              "-shortest", clip], check=True)
         subprocess.run(ff + ["-f", "lavfi", "-i", "testsrc=size=1280x720", "-frames:v", "1",
                              os.path.join(cls.dir, "thumb.jpg")], check=True)
-        os.makedirs(os.path.join(cls.dir, "dash"))
+        dash = os.path.join(cls.dir, "dash")
+        os.makedirs(dash)
+        # Run inside the folder: given a Windows path, ffmpeg's DASH muxer writes
+        # the segments to the current directory instead of next to the manifest.
         subprocess.run(ff + ["-i", clip, "-map", "0:v", "-map", "0:a", "-c", "copy",
-                             "-f", "dash", os.path.join(cls.dir, "dash", "manifest.mpd")], check=True)
+                             "-f", "dash", "manifest.mpd"], check=True, cwd=dash)
         with open(os.path.join(cls.dir, "subs.vtt"), "w") as fh:
             fh.write(VTT)
         with open(os.path.join(cls.dir, "video.html"), "w") as fh:
