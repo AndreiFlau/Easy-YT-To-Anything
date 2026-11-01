@@ -132,7 +132,7 @@
 <body>
 <div class="wrap">
   <h1>Easy <span>YT</span> To Anything</h1>
-  <p class="sub">Paste a link, pick a format, download. Powered by yt-dlp.</p>
+  <p class="sub">Paste a link from YouTube, X or 1000+ other sites, pick a format, download. Powered by yt-dlp.</p>
 
   {% if not ffmpeg %}
   <div class="warn">
@@ -148,6 +148,38 @@
   </div>
   {% endif %}
 
+  <!-- ===================== LOGIN ===================== -->
+  <details class="card settings" id="login">
+    <summary>🔒 Login <span id="loginBadge" class="hint" style="font-weight:400"></span></summary>
+    <p class="hint">Only for restricted posts on X, and private, age-restricted or
+      members-only videos. Public videos and posts work without it.</p>
+    <label>Log in using
+      <select id="cookies" data-persist>
+        <option value="">No login</option>
+        <option value="file">A cookies.txt file</option>
+        <optgroup label="A browser you're logged in with">
+          {% for b in browsers %}<option value="{{ b }}">{{ b|capitalize }}</option>{% endfor %}
+        </optgroup>
+      </select>
+    </label>
+    <p id="loginBrowser" class="hint hidden">Fully close that browser first (check the
+      system tray too). Firefox works best: recent Chrome and Edge may refuse, and then
+      a cookies.txt file is the way to go.</p>
+    <div id="loginFile" class="hidden">
+      <p class="hint">While logged in to the site, export its cookies with a "cookies.txt"
+        browser extension, then load the file here.</p>
+      <input type="file" id="cookieFile" accept=".txt,text/plain" style="margin-top:10px" />
+      <textarea id="cookiePaste" rows="2" autocomplete="off" spellcheck="false"
+        placeholder="…or paste the file's contents here" style="margin-top:10px"></textarea>
+      <div id="cookieStatus" class="status"></div>
+      <button id="cookieForget" class="small ghost hidden" style="margin-top:8px">Forget these cookies</button>
+      <p class="hint">⚠ This file <b>is</b> your login: anyone who gets it can use your
+        account, so don't share it, and delete it once it's loaded. The app keeps it only in
+        this page's memory and never saves it; it's gone when you reload or close the tab.
+        Heavy downloading while logged in can get an account rate-limited.</p>
+    </div>
+  </details>
+
   <div class="tabs">
     <div class="tab active" data-tab="single">🎬 Single video</div>
     <div class="tab" data-tab="batch">📃 Playlist / batch</div>
@@ -158,7 +190,7 @@
   <div id="tab-single" class="tabpane">
     <div class="card">
       <div class="row">
-        <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..." autofocus />
+        <input id="url" type="text" placeholder="Paste a YouTube, X or other video link" autofocus />
         <button id="fetch">Fetch</button>
       </div>
       <div id="fetchErr" class="status err"></div>
@@ -299,15 +331,6 @@
   <!-- ===================== SETTINGS ===================== -->
   <details class="card settings" id="settings">
     <summary>⚙ Settings</summary>
-    <label>Use cookies from browser
-      <select id="cookies" data-persist>
-        <option value="">None</option>
-        {% for b in browsers %}<option value="{{ b }}">{{ b|capitalize }}</option>{% endfor %}
-      </select>
-    </label>
-    <p class="hint">Fixes <i>"Sign in to confirm you're not a bot"</i>, age-restricted and
-      members-only videos. Pick the browser where you're logged in to the site.
-      On Windows, Chrome/Edge/Brave must be fully closed first; Firefox works best.</p>
     <p class="hint">
       ffmpeg: {% if ffmpeg %}<span class="ok">✓ found</span>{% else %}<span class="err">✗ not found</span>{% endif %}
       &nbsp;·&nbsp; JavaScript runtime (for YouTube):
@@ -357,7 +380,69 @@ $$("[data-persist]").forEach(inp => {
   }
   inp.addEventListener("change", () => store.set(inp.id, isBox ? inp.checked : inp.value));
 });
-const cookies = () => $("#cookies").value;
+
+// ---- Login ----
+// A loaded cookies.txt lives only in this variable: never in localStorage, and
+// never left in the text box. Reloading or closing the tab forgets it.
+let COOKIE_TEXT = "";
+const auth = () => {
+  const how = $("#cookies").value;
+  if (how === "file") return COOKIE_TEXT ? {cookies_text: COOKIE_TEXT} : {};
+  return how ? {cookies: how} : {};
+};
+function refreshLogin() {
+  const how = $("#cookies").value;
+  $("#loginBrowser").classList.toggle("hidden", !how || how === "file");
+  $("#loginFile").classList.toggle("hidden", how !== "file");
+  $("#cookieForget").classList.toggle("hidden", !COOKIE_TEXT);
+  $("#loginBadge").textContent =
+    how === "file" ? (COOKIE_TEXT ? "· using cookies.txt" : "· no cookies loaded yet")
+    : how ? `· using ${$("#cookies").selectedOptions[0].textContent}` : "";
+}
+function forgetCookies(message = "") {
+  COOKIE_TEXT = "";
+  $("#cookieStatus").textContent = message;
+  $("#cookieStatus").classList.toggle("err", !!message);
+  refreshLogin();
+}
+async function loadCookies(text) {
+  $("#cookiePaste").value = "";
+  $("#cookieFile").value = "";
+  forgetCookies();
+  $("#cookieStatus").textContent = "Checking…";
+  try {
+    const r = await fetch("/api/cookies/check", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({cookies_text: text})
+    });
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error || "Couldn't read that file.");
+    COOKIE_TEXT = text;
+    const more = s.site_count > s.sites.length ? ` and ${s.site_count - s.sites.length} more` : "";
+    $("#cookieStatus").textContent = [
+      `✓ Loaded ${s.count} cookies for ${s.sites.join(", ")}${more}.`,
+      s.expired ? `Ignored ${s.expired} expired.` : "",
+      ...s.warnings.map(w => "⚠ " + w),
+    ].filter(Boolean).join("\n");
+    refreshLogin();
+  } catch (e) {
+    forgetCookies(e.message);
+  }
+}
+$("#cookies").addEventListener("change", refreshLogin);
+$("#cookieForget").onclick = () => forgetCookies();
+$("#cookieFile").onchange = async e => {
+  const file = e.target.files[0];
+  if (file) loadCookies(await file.text());
+};
+let pasteTimer;
+$("#cookiePaste").addEventListener("input", e => {
+  clearTimeout(pasteTimer);
+  pasteTimer = setTimeout(() => { if (e.target.value.trim()) loadCookies(e.target.value); }, 250);
+});
+refreshLogin();
+// Errors that a login could fix mention the panel, so open it for them.
+const openLoginIfNeeded = msg => { if (msg.includes("🔒 Login")) $("#login").open = true; };
 
 function fmtDuration(s) {
   if (!s) return "";
@@ -418,7 +503,7 @@ async function fetchInfo() {
   try {
     const r = await fetch("/api/info", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({url, cookies: cookies()})
+      body: JSON.stringify({url, ...auth()})
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Failed");
@@ -426,6 +511,7 @@ async function fetchInfo() {
     renderResult(data);
   } catch (e) {
     $("#fetchErr").textContent = e.message;
+    openLoginIfNeeded(e.message);
     $("#result").classList.add("hidden");
   } finally {
     $("#fetch").disabled = false;
@@ -481,7 +567,7 @@ function renderResult(d) {
 $("#go").onclick = () => {
   const mode = MODES["tab-single"];
   const payload = {
-    url: FETCHED_URL, mode, cookies: cookies(),
+    url: FETCHED_URL, mode, ...auth(),
     square: $("#square").checked, split: $("#split").checked, compat: $("#compat").checked,
     quality: $("#quality").value,
   };
@@ -503,7 +589,7 @@ $("#bgo").onclick = () => {
   const urls = $("#batchUrls").value.trim();
   if (!urls) { alert("Paste a playlist URL or some links first."); return; }
   const payload = {
-    urls, mode: MODES["tab-batch"], cookies: cookies(),
+    urls, mode: MODES["tab-batch"], ...auth(),
     quality: $("#bquality").value,
     square: $("#bsquare").checked, split: $("#bsplit").checked, compat: $("#bcompat").checked,
   };
@@ -516,7 +602,7 @@ $("#trGo").onclick = () => {
   if (!urls) { alert("Paste a video URL first."); return; }
   $("#trResults").classList.add("hidden");
   const payload = {
-    urls, cookies: cookies(),
+    urls, ...auth(),
     lang: $("#trLang").value.trim(),
     timestamps: $("#trTs").checked,
     description: $("#trDesc").checked,
@@ -674,6 +760,7 @@ function poll(jobId, ui, btn, onDone) {
       ui.setLabel(j.status === "cancelled" ? "⏹ Cancelled" : "✖ Error", false);
       ui.label.classList.toggle("err", j.status === "error");
       ui.status.textContent = j.status === "error" ? (j.error || "Unknown error") : "";
+      openLoginIfNeeded(ui.status.textContent);
     } else {
       ui.setLabel(j.label || "Working…");
       ui.fill.style.width = (j.progress || 0) + "%";

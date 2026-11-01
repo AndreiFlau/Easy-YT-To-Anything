@@ -9,6 +9,7 @@ Run:  python app.py                       (opens http://127.0.0.1:5000)
 
 import argparse
 import html
+import io
 import json
 import os
 import re
@@ -21,6 +22,7 @@ import time
 import uuid
 import webbrowser
 import zipfile
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -98,6 +100,130 @@ def fmt_duration(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+class CookieError(ValueError):
+    """A pasted cookies.txt was rejected. The message never quotes the file."""
+
+
+class PastedCookies:
+    """Validated cookies from a pasted cookies.txt.
+
+    Kept in memory only and handed to yt-dlp as a file-like object, so a login
+    is never written to disk. The repr hides the contents in case one of these
+    ever ends up in a log or a traceback.
+    """
+
+    __slots__ = ("text", "summary")
+
+    def __init__(self, text, summary):
+        self.text = text
+        self.summary = summary
+
+    def __repr__(self):
+        return f"<PastedCookies: {self.summary['count']} cookies>"
+
+
+COOKIES_MAX_CHARS = 2_000_000
+COOKIES_MANY_SITES = 10
+_NETSCAPE_HEADER = "# Netscape HTTP Cookie File\n"
+_HTTPONLY_PREFIX = "#HttpOnly_"
+_COOKIE_DOMAIN_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def _cookie_site(domain):
+    """Roughly the site a cookie belongs to, for showing to the user."""
+    labels = domain.lstrip(".").lower().split(".")
+    return ".".join(labels) if labels[-1].isdigit() else ".".join(labels[-2:])
+
+
+def parse_cookies_txt(raw):
+    """Validate a Netscape cookies.txt and return it as PastedCookies.
+
+    Every line is checked and rebuilt, because yt-dlp prints the lines it can't
+    read to the console, cookie values included. Nothing from the file reaches
+    an error message, only the summary (sites and counts, never names or values).
+    """
+    if len(raw) > COOKIES_MAX_CHARS:
+        raise CookieError("That's too large to be a cookies.txt file.")
+    stripped = raw.strip()
+    if not stripped:
+        raise CookieError("That cookies.txt is empty.")
+    if stripped[0] in "[{":
+        raise CookieError("That looks like JSON. Export the cookies in Netscape "
+                          "format (a cookies.txt file) instead.")
+
+    now = time.time()
+    lines, sites, names_on_x = [], set(), set()
+    skipped = expired = 0
+    for line in stripped.splitlines():
+        line = line.strip("\r\n ")
+        if line.startswith(_HTTPONLY_PREFIX):
+            line = line[len(_HTTPONLY_PREFIX):]
+        elif line.startswith("#") or not line:
+            continue
+        fields = line.split("\t")
+        if len(fields) != 7:
+            skipped += 1
+            continue
+        domain, subdomains, path, secure, expires, name, value = fields
+        if (not _COOKIE_DOMAIN_RE.fullmatch(domain)
+                or subdomains not in ("TRUE", "FALSE")
+                or secure not in ("TRUE", "FALSE")
+                or not re.fullmatch(r"(?:[0-9]+(?:\.[0-9]+)?)?", expires)
+                or any(ord(c) < 32 or ord(c) == 127 for c in path + name + value)):
+            skipped += 1
+            continue
+        if expires and 0 < float(expires) < now:
+            expired += 1
+            continue
+        # http.cookiejar insists that this flag matches the leading dot, but
+        # some exporters disagree with it.
+        if subdomains == "TRUE" and not domain.startswith("."):
+            domain = "." + domain
+        flag = "TRUE" if domain.startswith(".") else "FALSE"
+        lines.append("\t".join((domain, flag, path or "/", secure, expires, name, value)))
+        site = _cookie_site(domain)
+        sites.add(site)
+        if site in ("x.com", "twitter.com"):
+            names_on_x.add(name)
+
+    if not lines:
+        if expired:
+            raise CookieError("Every cookie in that file has expired. "
+                              "Log in to the site again and export a new one.")
+        raise CookieError("That doesn't look like a cookies.txt file. "
+                          "Export one in Netscape format.")
+
+    warnings = []
+    if len(sites) > COOKIES_MANY_SITES:
+        warnings.append(f"This has logins for {len(sites)} sites. Safer to export "
+                        "only the site you need.")
+    if names_on_x and "auth_token" not in names_on_x:
+        warnings.append("These X cookies don't include a login (no auth_token). "
+                        "Log in to X, then export again.")
+    if skipped:
+        warnings.append(f"Skipped {skipped} unreadable line(s).")
+    summary = {
+        "count": len(lines),
+        "sites": sorted(sites)[:COOKIES_MANY_SITES],
+        "site_count": len(sites),
+        "expired": expired,
+        "skipped": skipped,
+        "warnings": warnings,
+    }
+    return PastedCookies(_NETSCAPE_HEADER + "\n".join(lines) + "\n", summary)
+
+
+def request_cookies(data):
+    """The login a request asked for: PastedCookies, a browser name, or None."""
+    text = data.get("cookies_text")
+    if text:
+        if not isinstance(text, str):
+            raise CookieError("That doesn't look like a cookies.txt file.")
+        return parse_cookies_txt(text)
+    browser = data.get("cookies")
+    return browser if isinstance(browser, str) and browser else None
+
+
 def base_ydl_opts(cookies=None):
     opts = {
         "quiet": True,
@@ -108,7 +234,10 @@ def base_ydl_opts(cookies=None):
     }
     if JS_RUNTIMES:
         opts["js_runtimes"] = {name: {} for name in JS_RUNTIMES}
-    if cookies and cookies in SUPPORTED_BROWSERS:
+    if isinstance(cookies, PastedCookies):
+        # A new stream each time: yt-dlp reads it to the end when it loads.
+        opts["cookiefile"] = io.StringIO(cookies.text)
+    elif cookies and cookies in SUPPORTED_BROWSERS:
         opts["cookiesfrombrowser"] = (cookies,)
     return opts
 
@@ -127,13 +256,20 @@ def _update_hint():
 
 
 _ERROR_HINTS = (
-    (r"cookie database|decrypt", "Close that browser completely and try again, "
-     "or pick Firefox under ⚙ Settings."),
+    (r"cookie database|decrypt|DPAPI|failed to load cookies",
+     "Close that browser completely and try again. If it still fails, recent "
+     "Chrome and Edge lock their cookies: use Firefox or a cookies.txt file "
+     "under 🔒 Login."),
     (r"Sign in to confirm|not a bot|--cookies|age-restricted|inappropriate for some users",
-     "The site wants a signed-in browser. Open ⚙ Settings (bottom of the page) "
-     "and pick the browser you're logged in with."),
+     "This needs a logged-in account. Open 🔒 Login at the top of the page and "
+     "pick the browser you're logged in with, or load a cookies.txt file."),
+    (r"No video could be found in this tweet", "Check that the post has a video "
+     "and not just images or a link. Some posts only show their video to "
+     "logged-in accounts: see 🔒 Login."),
+    (r"tweet is unavailable", "The post may be deleted, or only visible to some "
+     "accounts: see 🔒 Login."),
     (r"HTTP Error 429|Too Many Requests", "The site is rate-limiting you. Wait a "
-     "few minutes and try again (signing in via ⚙ Settings also helps)."),
+     "few minutes and try again (logging in via 🔒 Login also helps)."),
     (r"Requested format is not available|nsig|signature|challenge|JavaScript|"
      r"Unable to extract|please report this issue", None),  # -> _update_hint()
 )
@@ -148,6 +284,7 @@ def clean_error(exc):
     msg = re.sub(r"^\[[\w:.-]+\]\s+(?:[^\s:]+:\s+)?", "", msg)  # "[youtube] abc123: "
     msg = re.sub(r";?\s*please report this issue.*$", "", msg, flags=re.I | re.S)
     msg = re.sub(r"\s*\(caused by .*\)\s*$", "", msg, flags=re.S)
+    msg = re.sub(r"\s*Use --cookies.*$", "", msg, flags=re.S)  # command-line advice
     msg = msg.strip().rstrip(";").strip() or exc.__class__.__name__
     for pattern, hint in _ERROR_HINTS:
         if re.search(pattern, raw, re.I):
@@ -349,7 +486,9 @@ def build_download_opts(out_dir, *, mode, quality="best", format_id=None,
 
     if mode == "audio":
         is_audio = True
-        opts["format"] = "bestaudio/best"
+        # Without ffmpeg an HLS stream can't be repaired after downloading (X
+        # hands out MPEG-TS that would land in a ".mp4"), so prefer direct files.
+        opts["format"] = "bestaudio/best" if FFMPEG else "bestaudio[protocol^=http]/bestaudio/best"
         if FFMPEG:
             label = "Downloading audio"
             opts["writethumbnail"] = True  # grabbed so we can embed it as art
@@ -396,12 +535,16 @@ def build_download_opts(out_dir, *, mode, quality="best", format_id=None,
             if compat:
                 # H.264 + AAC plays everywhere (Windows, QuickTime, phones, TVs).
                 opts["format_sort"] = ["vcodec:h264", "res", "acodec:aac"]
+                # MP4 was asked for, so no MKV fallback. X doesn't declare the
+                # codec of its audio streams, which would otherwise trigger it.
+                opts["merge_output_format"] = "mp4"
             opts["writethumbnail"] = True
             pps.append({"key": "FFmpegMetadata", "add_metadata": True})
             pps.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
         else:
-            # Can't merge separate streams without ffmpeg: single-file formats only.
-            opts["format"] = f"best{height}/best"
+            # Can't merge separate streams without ffmpeg: single-file formats
+            # only, and direct files first (see the note on audio above).
+            opts["format"] = f"best{height}[protocol^=http]/best{height}/best"
 
     opts["outtmpl"] = os.path.join(out_dir, name_tmpl + ".%(ext)s")
     if pps:
@@ -559,6 +702,39 @@ def _expand_urls(raw_urls, cookies=None, job_id=None, whole_playlist=True):
 # --------------------------------------------------------------------------- #
 # Routes: download
 # --------------------------------------------------------------------------- #
+_LOCAL_NAMES = ("127.0.0.1", "localhost", "::1")
+
+
+@app.before_request
+def only_this_computer():
+    """Refuse requests that didn't come from this app's own page.
+
+    The server only listens on this machine, but a website open in the browser
+    could still reach it: directly, or by pointing its own domain at 127.0.0.1
+    (DNS rebinding). Those show up as a foreign Origin or Host header.
+    """
+    origin = request.headers.get("Origin")
+    try:
+        host_ok = urlsplit("//" + request.host).hostname in _LOCAL_NAMES
+        origin_ok = origin is None or urlsplit(origin).netloc == request.host
+    except ValueError:
+        host_ok = origin_ok = False
+    if not (host_ok and origin_ok):
+        return jsonify({"error": "Blocked: this request didn't come from the app's own page."}), 403
+    return None
+
+
+@app.errorhandler(CookieError)
+def cookie_error(exc):
+    return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/cookies/check", methods=["POST"])
+def api_cookies_check():
+    """Validate a pasted cookies.txt and describe it. Nothing is kept."""
+    return jsonify(parse_cookies_txt(str(_payload().get("cookies_text") or "")).summary)
+
+
 @app.route("/")
 def index():
     return render_template(
@@ -581,7 +757,7 @@ def api_info():
     if not url:
         return jsonify({"error": "Please paste a URL."}), 400
 
-    opts = {**base_ydl_opts(data.get("cookies")), "playlist_items": "1"}
+    opts = {**base_ydl_opts(request_cookies(data)), "playlist_items": "1"}
     try:
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -667,6 +843,7 @@ def api_download():
     if not url:
         return jsonify({"error": "Please paste a URL."}), 400
 
+    cookies = request_cookies(data)
     job_id = new_job(label="Starting…")
     square = bool(data.get("square", False))
     opts, label, is_audio = build_download_opts(
@@ -678,7 +855,7 @@ def api_download():
         square=square,
         split=bool(data.get("split", True)),
         compat=bool(data.get("compat", False)),
-        cookies=data.get("cookies"),
+        cookies=cookies,
     )
     run_job(job_id, _run_single, url, opts, label, square, is_audio)
     return jsonify({"job_id": job_id})
@@ -758,7 +935,7 @@ def api_batch():
         "square": bool(data.get("square", False)),
         "split": bool(data.get("split", True)),
         "compat": bool(data.get("compat", False)),
-        "cookies": data.get("cookies"),
+        "cookies": request_cookies(data),
     }
     job_id = new_job(label="Starting…")
     run_job(job_id, _run_batch, urls, settings)
@@ -1171,7 +1348,7 @@ def api_transcript():
         "timestamps": bool(data.get("timestamps", False)),
         "description": bool(data.get("description", False)),
         "format": "srt" if data.get("format") == "srt" else "txt",
-        "cookies": data.get("cookies"),
+        "cookies": request_cookies(data),
     }
     job_id = new_job(label="Starting…")
     run_job(job_id, _run_transcripts, urls, opts)

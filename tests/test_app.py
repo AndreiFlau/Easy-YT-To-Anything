@@ -6,8 +6,10 @@ The end-to-end tests serve generated media from a local web server (no
 internet needed) and are skipped when ffmpeg isn't installed.
 """
 
+import contextlib
 import functools
 import http.server
+import io
 import json
 import os
 import shutil
@@ -17,6 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -45,7 +48,19 @@ class CleanErrorTests(unittest.TestCase):
     def test_bot_check_hint(self):
         msg = A.clean_error(Exception("ERROR: [youtube] abc: Sign in to confirm you're not a bot."))
         self.assertTrue(msg.startswith("Sign in to confirm you're not a bot."))
-        self.assertIn("Settings", msg)
+        self.assertIn("🔒 Login", msg)
+
+    def test_x_login_error_drops_command_line_advice(self):
+        msg = A.clean_error(Exception(
+            "ERROR: [twitter] 123: NSFW tweet requires authentication. Use "
+            "--cookies-from-browser or --cookies for the authentication. See https://x"))
+        self.assertTrue(msg.startswith("NSFW tweet requires authentication."))
+        self.assertNotIn("--cookies", msg)
+        self.assertIn("🔒 Login", msg)
+
+    def test_x_post_without_video_gets_a_tip(self):
+        msg = A.clean_error(Exception("ERROR: [twitter] 1: No video could be found in this tweet"))
+        self.assertIn("images", msg)
 
     def test_report_issue_becomes_update_hint(self):
         msg = A.clean_error(Exception(
@@ -153,6 +168,200 @@ class OptionTests(unittest.TestCase):
 
     def test_safe_name(self):
         self.assertEqual(A._safe_name('a/b:c*?"<>|.'), "a_b_c______")
+
+    def test_compatible_mode_never_falls_back_to_mkv(self):
+        with unittest.mock.patch.object(A, "FFMPEG", "/usr/bin/ffmpeg"):
+            compat, _, _ = A.build_download_opts("/tmp/x", mode="best", compat=True)
+            plain, _, _ = A.build_download_opts("/tmp/x", mode="best")
+        self.assertEqual(compat["merge_output_format"], "mp4")
+        self.assertEqual(plain["merge_output_format"], "mp4/mkv")
+
+    def test_without_ffmpeg_direct_files_beat_hls(self):
+        # X's HLS is MPEG-TS, which would land in a ".mp4" with nothing to repair it.
+        with unittest.mock.patch.object(A, "FFMPEG", None):
+            video, _, _ = A.build_download_opts("/tmp/x", mode="best", quality="720")
+            audio, _, _ = A.build_download_opts("/tmp/x", mode="audio")
+        self.assertTrue(video["format"].startswith("best[height<=720][protocol^=http]/"))
+        self.assertTrue(audio["format"].startswith("bestaudio[protocol^=http]/"))
+
+
+SECRET = "s3cr3tVALUEdo-not-leak"
+COOKIES_TXT = (
+    "# Netscape HTTP Cookie File\n"
+    f"#HttpOnly_.x.com\tTRUE\t/\tTRUE\t0\tauth_token\t{SECRET}\n"
+    "x.com\tTRUE\t/\tTRUE\t0\tct0\tabc\n"
+    ".example.org\tTRUE\t/\tFALSE\t1\told\tgone\n"
+)
+
+
+class PastedCookieTests(unittest.TestCase):
+    def test_summary_describes_without_revealing(self):
+        c = A.parse_cookies_txt(COOKIES_TXT)
+        self.assertEqual((c.summary["count"], c.summary["sites"], c.summary["expired"]),
+                         (2, ["x.com"], 1))
+        self.assertEqual(c.summary["warnings"], [])
+        self.assertNotIn(SECRET, json.dumps(c.summary))
+        self.assertNotIn("auth_token", json.dumps(c.summary))
+        self.assertNotIn(SECRET, repr(c))
+
+    def test_yt_dlp_loads_them_from_memory(self):
+        c = A.parse_cookies_txt(COOKIES_TXT)
+        for _ in range(2):  # every YoutubeDL needs a fresh, unread stream
+            with A.YoutubeDL(A.base_ydl_opts(c)) as ydl:
+                self.assertEqual(ydl.cookiejar.get_cookies_for_url("https://api.x.com/")[0].domain, ".x.com")
+                self.assertIn(SECRET, [k.value for k in ydl.cookiejar])
+
+    def test_mismatched_subdomain_flag_is_repaired(self):
+        c = A.parse_cookies_txt(COOKIES_TXT)
+        self.assertIn(".x.com\tTRUE\t/\tTRUE\t0\tct0\tabc", c.text)
+
+    def test_rejections_never_quote_the_file(self):
+        bad = {
+            "json": f'[{{"name": "auth_token", "value": "{SECRET}"}}]',
+            "garbage": f"not a cookie file {SECRET}\nsecond line {SECRET}",
+            "too few fields": f".x.com\tTRUE\t/\t{SECRET}",
+            "all expired": f".x.com\tTRUE\t/\tTRUE\t1\tauth_token\t{SECRET}",
+            "empty": "   \n",
+            "too large": SECRET * 200_000,
+        }
+        for name, text in bad.items():
+            with self.subTest(name):
+                with self.assertRaises(A.CookieError) as ctx:
+                    A.parse_cookies_txt(text)
+                self.assertNotIn(SECRET, str(ctx.exception))
+
+    def test_bad_lines_are_dropped_and_counted_but_not_quoted(self):
+        c = A.parse_cookies_txt(COOKIES_TXT + f"broken line {SECRET}2\n"
+                                              f".x.com\tMAYBE\t/\tTRUE\t0\ta\t{SECRET}3\n"
+                                              f".x.com\tTRUE\t/\tTRUE\tsoon\ta\t{SECRET}4\n"
+                                              f".x.com\tTRUE\t/\tTRUE\t0\ta\t{SECRET}\x01\n")
+        self.assertEqual(c.summary["skipped"], 4)
+        self.assertNotIn(SECRET + "2", c.text)
+        self.assertNotIn(SECRET, json.dumps(c.summary))
+
+    def test_warns_when_x_login_is_missing_or_file_is_too_broad(self):
+        no_login = A.parse_cookies_txt(".x.com\tTRUE\t/\tTRUE\t0\tguest_id\tv1\n")
+        self.assertIn("auth_token", no_login.summary["warnings"][0])
+        broad = A.parse_cookies_txt("".join(
+            f".site{i}.com\tTRUE\t/\tTRUE\t0\ta\tb\n" for i in range(A.COOKIES_MANY_SITES + 1)))
+        self.assertIn("11 sites", broad.summary["warnings"][0])
+        self.assertLessEqual(len(broad.summary["sites"]), A.COOKIES_MANY_SITES)
+
+    def test_routes_reject_bad_cookies_without_starting_a_job(self):
+        c = A.app.test_client()
+        before = len(A.JOBS)
+        for ep, body in (("/api/info", {"url": "http://x"}), ("/api/download", {"url": "http://x"}),
+                         ("/api/batch", {"urls": "http://x"}), ("/api/transcript", {"urls": "http://x"})):
+            r = c.post(ep, json={**body, "cookies_text": f"junk {SECRET}"})
+            self.assertEqual(r.status_code, 400, ep)
+            self.assertNotIn(SECRET, r.get_data(as_text=True))
+        self.assertEqual(len(A.JOBS), before)
+        self.assertEqual(c.post("/api/cookies/check", json={"cookies_text": COOKIES_TXT}).status_code, 200)
+
+
+class OnlyThisComputerTests(unittest.TestCase):
+    def setUp(self):
+        self.c = A.app.test_client()
+
+    def status(self, host="127.0.0.1:5000", origin=None):
+        headers = {"Host": host}
+        if origin:
+            headers["Origin"] = origin
+        return self.c.post("/api/cookies/check", json={"cookies_text": COOKIES_TXT}, headers=headers).status_code
+
+    def test_own_page_is_allowed(self):
+        self.assertEqual(self.status(), 200)
+        self.assertEqual(self.status(origin="http://127.0.0.1:5000"), 200)
+        self.assertEqual(self.status(host="localhost:5001", origin="http://localhost:5001"), 200)
+        self.assertEqual(self.status(host="[::1]:5000", origin="http://[::1]:5000"), 200)
+
+    def test_other_sites_are_refused(self):
+        self.assertEqual(self.status(origin="https://evil.example"), 403)
+        self.assertEqual(self.status(origin="null"), 403)
+        self.assertEqual(self.status(origin="http://127.0.0.1:9999"), 403)
+
+    def test_dns_rebinding_is_refused(self):
+        self.assertEqual(self.status(host="evil.example:5000"), 403)
+        self.assertEqual(self.status(host="evil.example:5000", origin="http://evil.example:5000"), 403)
+        self.assertEqual(self.c.get("/", headers={"Host": "evil.example"}).status_code, 403)
+        self.assertEqual(self.c.get("/api/file/x", headers={"Host": "127.0.0.1.evil.example"}).status_code, 403)
+
+
+class CookieNeverLeaksTests(unittest.TestCase):
+    """A pasted login is used on the wire and comes back out nowhere. No ffmpeg needed."""
+
+    def test_end_to_end(self):
+        fixtures = tempfile.mkdtemp(prefix="eyt-cookie-")
+        self.addCleanup(shutil.rmtree, fixtures, ignore_errors=True)
+        with open(os.path.join(fixtures, "clip.mp4"), "wb") as fh:
+            fh.write(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 2000)
+        with open(os.path.join(fixtures, "subs.vtt"), "w") as fh:
+            fh.write(VTT)
+        with open(os.path.join(fixtures, "video.html"), "w") as fh:
+            fh.write('<!DOCTYPE html><html><head><title>Clip</title></head><body><video>'
+                     '<source src="clip.mp4" type="video/mp4">'
+                     '<track kind="subtitles" src="subs.vtt" srclang="en"></video></body></html>')
+
+        received = []
+
+        class Recorder(_QuietHandler):
+            def do_GET(self):
+                received.append(self.headers.get("Cookie") or "")
+                super().do_GET()
+
+        httpd = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), functools.partial(Recorder, directory=fixtures))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        base = f"http://127.0.0.1:{httpd.server_address[1]}/"
+
+        # Includes a malformed line: yt-dlp would print that one to the console.
+        pasted = (f"127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\t{SECRET}\n"
+                  f"a broken line with {SECRET} inside\n")
+        c = A.app.test_client()
+        output = []
+
+        def call(method, path, **kw):
+            r = getattr(c, method)(path, **kw)
+            output.append(r.get_data(as_text=True))
+            return r
+
+        def run(endpoint, body):
+            job_id = call("post", endpoint, json={**body, "cookies_text": pasted}).json["job_id"]
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                job = call("get", f"/api/progress/{job_id}").json
+                if job["status"] in A.DONE_STATES:
+                    break
+                time.sleep(0.02)
+            self.assertIn(job["status"], A.DONE_STATES)
+            if job["status"] == "finished":
+                r = c.get(f"/api/file/{job_id}")
+                output.append(r.data.decode("latin-1"))
+                r.close()
+
+        console = io.StringIO()
+        with contextlib.redirect_stderr(console), contextlib.redirect_stdout(console):
+            call("post", "/api/cookies/check", json={"cookies_text": pasted})
+            call("post", "/api/info", json={"url": base + "video.html", "cookies_text": pasted})
+            call("post", "/api/info", json={"url": base + "missing.html", "cookies_text": pasted})
+            run("/api/download", {"url": base + "video.html"})
+            run("/api/download", {"url": base + "missing.html"})
+            run("/api/batch", {"urls": base + "video.html\n" + base + "missing.html"})
+            run("/api/transcript", {"urls": base + "video.html"})
+
+        # Control: the cookie really was in use, or the rest proves nothing.
+        self.assertTrue(any(SECRET in h for h in received), "the cookie was never sent")
+        self.assertGreater(len(output), 6)
+        for text in output:
+            self.assertNotIn(SECRET, text)
+        self.assertNotIn(SECRET, console.getvalue())
+        self.assertNotIn(SECRET, repr(A.JOBS))
+        for root, _dirs, names in os.walk(A.DOWNLOAD_ROOT):
+            for name in names:
+                with open(os.path.join(root, name), "rb") as fh:
+                    self.assertNotIn(SECRET.encode(), fh.read(), name)
 
 
 # --------------------------------------------------------------------------- #

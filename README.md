@@ -1,7 +1,8 @@
 # Easy YT To Anything
 
 A dead-simple browser interface around [yt-dlp](https://github.com/yt-dlp/yt-dlp).
-Paste a video URL, pick a format, download. No command line needed.
+Paste a link from YouTube, X/Twitter or [1000+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md),
+pick a format, download. No command line needed.
 
 ![flow](https://img.shields.io/badge/paste-pick-download-blue)
 
@@ -33,10 +34,10 @@ Paste a video URL, pick a format, download. No command line needed.
   codec, and container the site offers).
 - 📊 Live progress with speed and ETA (and an `N of M` counter for batches),
   plus a **Cancel** button.
-- ⚙ **Settings** — use cookies from your browser (Firefox, Chrome, Edge, …) for
-  sites that need you to be signed in.
+- 🔒 **Login** — for restricted X posts and private or age-restricted videos: use
+  your browser's login or load a cookies.txt file. See [Login](#login).
 - 💾 Your choices (format, quality, options, tab) are remembered between visits.
-- Works with YouTube and the [1000+ sites yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+- Works with YouTube, X/Twitter and the [1000+ sites yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
 ## Quick start
 
@@ -80,12 +81,36 @@ one, YouTube links may fail or only offer a few formats. The app uses
 - **macOS:** `brew install deno`
 - **Linux:** `curl -fsSL https://deno.land/install.sh | sh`
 
+## Login
+
+Public videos and X posts work without logging in. For restricted X posts and
+private, age-restricted or members-only videos, open **🔒 Login** at the top of
+the page and choose one:
+
+- **A browser you're logged in with.** Fully close it first. Firefox works best;
+  recent Chrome and Edge may refuse to share their cookies.
+- **A cookies.txt file.** While logged in, export the site's cookies with a
+  "cookies.txt" browser extension, then load or paste the file.
+
+A cookies.txt file **is** your login, so anyone who gets it can use your account.
+Don't share it, and delete it once it's loaded. How the app treats it:
+
+- Held in the page's memory and in the running job only. It's never written to
+  disk or browser storage, and reloading the page forgets it.
+- Checked first and shown only as a summary (which sites, how many cookies). Error
+  messages never quote it.
+- yt-dlp only sends each cookie to the site it belongs to.
+- The app only accepts requests from its own page on this computer, so other
+  websites you have open can't use your login through it.
+
 ## Troubleshooting
 
-- **"Sign in to confirm you're not a bot"**, age-restricted or members-only
-  videos: open **⚙ Settings** at the bottom of the page and pick the browser
-  you're logged in with. On Windows, fully close Chrome/Edge/Brave first
-  (Firefox works best).
+- **"Sign in to confirm you're not a bot"**, restricted X posts, age-restricted
+  or members-only videos: see [Login](#login).
+- **"No video could be found in this tweet"**: the post may only have images or a
+  link, or its video may only be visible when logged in.
+- **A video won't play without ffmpeg**: choose **Advanced** and pick another
+  format, or install ffmpeg.
 - **A site suddenly stops working:** update yt-dlp:
   `python -m pip install -U "yt-dlp[default]"` (`run.bat` / `run.sh` do this
   for you).
@@ -95,6 +120,7 @@ one, YouTube links may fail or only offer a few formats. The app uses
 
 ```
 Browser (templates/index.html)
+   │  fetch /api/cookies/check → validates a cookies.txt, returns a summary (keeps nothing)
    │  fetch /api/info          → yt-dlp probes the URL, returns formats
    │  fetch /api/download      → starts a background single-file job, returns a job id
    │  fetch /api/batch         → expands playlists, downloads all, zips them
